@@ -1,6 +1,19 @@
-KAAMWALA
+⚡ FixBuddy
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+"हर घर का रिपेयर पार्टनर"
+"झटपट सेवा, फ़िक्सबड्डी के साथ"
+"काम वही, भरोसा नया – फ़िक्सबड्डी"
+"फ़िक्सबड्डी – अब घर बैठे मिलेगा मिस्त्री"
+"बिजली हो या ब्रेक – बड्डी है ना!"
+"मिस्त्री ढूंढना हुआ आसान – फ़िक्सबड्डी के साथ"
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# ⚡ Kaamwala – On-Demand Booking Platform for Electricians & Mechanics
+![image](https://github.com/user-attachments/assets/4110d59d-b4db-4b6c-93b3-caff870745d5)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ⚡ FixBuddy – On-Demand Booking Platform for Electricians & Mechanics
 
 > A smart, real-world solution to connect verified home-service workers like electricians and vehicle mechanics with customers who need urgent, trusted help.
 
@@ -8,7 +21,7 @@ KAAMWALA
 
 ## 📌 Overview
 
-**Kaamwala** is a full-stack web platform that bridges the gap between daily service needs (like electrical work or vehicle repairs) and verified, nearby workers. Customers can find **trusted electricians or mechanics**, while skilled workers get visibility, income, and direct bookings — all in one app.
+**FixBuddy** is a full-stack web platform that bridges the gap between daily service needs (like electrical work or vehicle repairs) and verified, nearby workers. Customers can find **trusted electricians or mechanics**, while skilled workers get visibility, income, and direct bookings — all in one app.
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -16,14 +29,14 @@ KAAMWALA
 
 In India, it’s difficult to quickly find a trustworthy electrician or mechanic nearby — especially in smaller cities or during emergencies. Similarly, many workers struggle to find consistent jobs and lack a platform to showcase their availability or credibility.
 
-**Kaamwala solves this by:**
+**FixBuddy solves this by:**
 - Giving customers a fast, simple way to **book verified workers**
 - Giving electricians and mechanics a way to **register and earn**
 - Focusing on **trust**, **speed**, and **hyperlocal visibility**
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## 👥 Who Can Use Kaamwala?
+## 👥 Who Can Use FixBuddy?
 
 ### 🧑‍🔧 Electricians & Mechanics (Workers)
 - Sign up with Aadhaar verification, name, mobile, etc.
@@ -74,7 +87,7 @@ In India, it’s difficult to quickly find a trustworthy electrician or mechanic
 
 ## 💰 Smart Payment System (with AI/ML)
 
-Kaamwala includes a built-in **payment gateway** (e.g. Razorpay, Stripe, or UPI integration) allowing customers to **pay directly to workers** via the platform.
+FixBuddy includes a built-in **payment gateway** (e.g. Razorpay, Stripe, or UPI integration) allowing customers to **pay directly to workers** via the platform.
 
 ### ⚙️ How Payment is Calculated:
 
@@ -92,7 +105,7 @@ Once calculated, the app will **recommend a fair price**.
 
 ## 🤝 Built-in Bargaining Feature
 
-To match Indian service culture, **Kaamwala allows customer-worker negotiation** inside the app before finalizing the payment.
+To match Indian service culture, **FixBuddy allows customer-worker negotiation** inside the app before finalizing the payment.
 
 - 💬 In-app chat system to discuss price
 - ⏳ Time-bound counter-offer system
@@ -102,9 +115,9 @@ To match Indian service culture, **Kaamwala allows customer-worker negotiation**
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-## 🚀 Why Kaamwala is Different
+## 🚀 Why FixBuddy is Different
 
-| Feature                               | Kaamwala     | Urban Company | Sulekha | HouseJoy |
+| Feature                               | FixBuddy     | Urban Company | Sulekha | HouseJoy |
 |---------------------------------------|--------------|----------------|--------|----------|
 | Aadhaar-based worker verification     | ✅           | ❌               | ❌       | ❌      |
 | Hyperlocal mechanics AND electricians | ✅           | ⚠️ (limited)     | ✅       | ⚠️      |
@@ -120,7 +133,7 @@ To match Indian service culture, **Kaamwala allows customer-worker negotiation**
 
 ## 🧠 Why Choose This Project?
 
-This isn’t just another clone. **Kaamwala** is:
+This isn’t just another clone. **FixBuddy** is:
 - 🔥 Focused on **tier 2/3 cities** and **working-class inclusion**
 - 🚀 Built with modern stacks ready for scaling
 - 🛡️ Built-in verification for worker trust
@@ -149,7 +162,7 @@ This isn’t just another clone. **Kaamwala** is:
 
 ## 📬 Contact
 
-For collaborations, partnerships, or support, reach out at **team.kaamwala@example.com**.
+For collaborations, partnerships, or support, reach out at **team.FixBuddy@example.com**.
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -160,7 +173,7 @@ For collaborations, partnerships, or support, reach out at **team.kaamwala@examp
 
 ## 🧠 Why This Stands Out
 
-- 💡 Most platforms offer flat-rate prices or manual cost entry — **Kaamwala intelligently calculates cost using AI**
+- 💡 Most platforms offer flat-rate prices or manual cost entry — **FixBuddy intelligently calculates cost using AI**
 - 🤝 Bargaining is **hyper-local behavior-aware**, giving people comfort and familiarity
 - 🔐 Payments are **transparent**, secure, and fair for both parties
 
