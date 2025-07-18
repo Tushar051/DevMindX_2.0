@@ -1,3 +1,3 @@
-IntelliQ
+DevMindX
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-![Gemini_Generated_Image_d71kh0d71kh0d71k](https://github.com/user-attachments/assets/2a1a25f0-eb10-45a9-9976-0e27e4aabb4c)
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/ae3f1d93-239a-4356-8df4-d352716e89be" />
