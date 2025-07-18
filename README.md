@@ -1,6 +1,7 @@
 DevMindX
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+![DevMindXVideo-ezgif com-optimize](https://github.com/user-attachments/assets/60bac5f5-4e45-49d4-8c0c-0c3c1dbcec23)
 
 
-<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/ae3f1d93-239a-4356-8df4-d352716e89be" />
+
 
