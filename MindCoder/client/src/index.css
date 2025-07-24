@@ -1,0 +1,242 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(20, 14.3%, 4.1%);
+  --muted: hsl(60, 4.8%, 95.9%);
+  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(20, 14.3%, 4.1%);
+  --border: hsl(20, 5.9%, 90%);
+  --input: hsl(20, 5.9%, 90%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(60, 4.8%, 95.9%);
+  --secondary-foreground: hsl(24, 9.8%, 10%);
+  --accent: hsl(60, 4.8%, 95.9%);
+  --accent-foreground: hsl(24, 9.8%, 10%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(20, 14.3%, 4.1%);
+  --radius: 0.5rem;
+
+  /* IDE Theme Colors */
+  --editor-bg: hsl(240, 6%, 10%);
+  --sidebar-bg: hsl(240, 8%, 14%);
+  --panel-bg: hsl(240, 8%, 18%);
+  --border-color: hsl(240, 8%, 24%);
+  --text-primary: hsl(0, 0%, 80%);
+  --text-secondary: hsl(0, 0%, 59%);
+  --accent-blue: hsl(207, 90%, 54%);
+  --success-green: hsl(151, 55%, 62%);
+  --warning-orange: hsl(35, 100%, 50%);
+  --error-red: hsl(348, 86%, 61%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* IDE Specific Styles */
+.ide-bg {
+  background-color: var(--editor-bg);
+}
+
+.ide-sidebar {
+  background-color: var(--sidebar-bg);
+}
+
+.ide-panel {
+  background-color: var(--panel-bg);
+}
+
+.ide-border {
+  border-color: var(--border-color);
+}
+
+.ide-text-primary {
+  color: var(--text-primary);
+}
+
+.ide-text-secondary {
+  color: var(--text-secondary);
+}
+
+/* Syntax Highlighting */
+.syntax-keyword { 
+  color: hsl(225, 72%, 70%); 
+}
+
+.syntax-string { 
+  color: hsl(27, 69%, 66%); 
+}
+
+.syntax-comment { 
+  color: hsl(101, 29%, 47%); 
+}
+
+.syntax-function { 
+  color: hsl(54, 70%, 68%); 
+}
+
+.syntax-variable { 
+  color: hsl(199, 87%, 76%); 
+}
+
+.syntax-number { 
+  color: hsl(102, 27%, 67%); 
+}
+
+/* Scrollbar Styling */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--editor-bg);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(240, 8%, 32%);
+}
+
+/* Monaco Editor Container */
+.monaco-editor-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* File Tree Styling */
+.file-tree-item {
+  @apply flex items-center px-2 py-1 text-sm cursor-pointer transition-colors;
+}
+
+.file-tree-item:hover {
+  background-color: var(--border-color);
+}
+
+.file-tree-item.active {
+  background-color: var(--border-color);
+  color: var(--accent-blue);
+}
+
+/* Tab Styling */
+.editor-tab {
+  @apply flex items-center px-4 py-2 text-sm cursor-pointer border-r transition-colors;
+  border-color: var(--border-color);
+  background-color: var(--panel-bg);
+}
+
+.editor-tab.active {
+  background-color: var(--editor-bg);
+  color: var(--text-primary);
+}
+
+.editor-tab:not(.active) {
+  color: var(--text-secondary);
+}
+
+.editor-tab:hover:not(.active) {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Chat bubble styling */
+.chat-bubble {
+  @apply rounded-lg p-3 max-w-xs;
+}
+
+.chat-bubble.user {
+  @apply ml-auto;
+  background-color: var(--accent-blue);
+  color: white;
+}
+
+.chat-bubble.assistant {
+  background-color: var(--panel-bg);
+  color: var(--text-primary);
+}
+
+/* Terminal styling */
+.terminal-content {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  line-height: 1.4;
+}
+
+.terminal-prompt {
+  color: var(--success-green);
+}
+
+.terminal-error {
+  color: var(--error-red);
+}
+
+.terminal-info {
+  color: var(--accent-blue);
+}
+
+.terminal-cursor {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
