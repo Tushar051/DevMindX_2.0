@@ -53,7 +53,19 @@ export const insertChatSessionSchema = createInsertSchema(chatSessions).pick({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export interface User {
+  id: number | string;
+  username: string;
+  email: string;
+  password?: string | null;
+  isVerified?: boolean;
+  verificationToken?: string | null;
+  otp?: string | null;
+  otpExpiry?: Date | null;
+  googleId?: string | null;
+  githubId?: string | null;
+  createdAt?: Date;
+}
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;

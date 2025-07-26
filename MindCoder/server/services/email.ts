@@ -8,6 +8,8 @@ const createTransporter = () => {
   // In development mode, we can use a test account or console log
   if (isDev && !process.env.FORCE_EMAIL) {
     console.log('Running in development mode - emails will be logged instead of sent');
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`FORCE_EMAIL: ${process.env.FORCE_EMAIL}`);
     return null;
   }
   

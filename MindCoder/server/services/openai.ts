@@ -55,10 +55,14 @@ Respond with JSON in this exact format:
       max_tokens: 4000
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    if (content === null) {
+      throw new Error('OpenAI response content is null');
+    }
+    const result = JSON.parse(content);
     return result;
   } catch (error) {
-    throw new Error(`Failed to generate project: ${error.message}`);
+    throw new Error(`Failed to generate project: ${(error as any).message}`);
   }
 }
 
@@ -83,9 +87,13 @@ export async function generateCode(prompt: string, context?: string): Promise<st
       max_tokens: 2000
     });
 
-    return response.choices[0].message.content;
+    const content = response.choices[0].message.content;
+    if (content === null) {
+      throw new Error('OpenAI response content is null');
+    }
+    return content;
   } catch (error) {
-    throw new Error(`Failed to generate code: ${error.message}`);
+    throw new Error(`Failed to generate code: ${(error as any).message}`);
   }
 }
 
@@ -109,8 +117,12 @@ export async function chatWithAI(message: string, conversationHistory: any[] = [
       max_tokens: 1500
     });
 
-    return response.choices[0].message.content;
+    const content = response.choices[0].message.content;
+    if (content === null) {
+      throw new Error('OpenAI response content is null');
+    }
+    return content;
   } catch (error) {
-    throw new Error(`Failed to chat with AI: ${error.message}`);
+    throw new Error(`Failed to chat with AI: ${(error as any).message}`);
   }
 }

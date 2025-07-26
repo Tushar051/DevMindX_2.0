@@ -7,11 +7,12 @@ import { sendVerificationEmail, sendOTPVerificationEmail } from "./services/emai
 import { generateProject, generateCode, chatWithAI } from "./services/openai";
 import { generateProjectWithAI, generateCodeWithAI, chatWithAIModel, analyzeCodeWithAI, getAvailableModels } from "./services/aiService";
 import passport from 'passport';
-import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { Strategy as GoogleStrategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
-import session from 'express-session';
+ import session from 'express-session';
+ import { User } from '../shared/schema';
 import { connectToMongoDB } from './db';
-import { ObjectId } from 'mongodb';
+ import { ObjectId } from 'mongodb';
 import { spawn, exec } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -42,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user && typeof id === 'string' && id.length === 24) {
         // Try to find by MongoDB _id if needed
         const db = await connectToMongoDB();
-        const mongoUser = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        const mongoUser = await db.collection<MongoUser>('users').findOne({ _id: new ObjectId(id) });
         if (mongoUser) {
           user = {
             id: mongoUser._id.toString(),
@@ -66,6 +67,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Google OAuth Strategy
+  interface MongoUser extends User {
+    _id: ObjectId;
+  }
+
   interface GoogleProfile {
     id: string;
     displayName?: string;
@@ -84,20 +89,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     verificationToken?: string;
   }
 
-  interface User {
-      id: string | number;
-      googleId?: string | null;
-      githubId?: string | null;
-      email: string;
-      isVerified: boolean | null;
-  }
 
     passport.use(new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
       callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/auth/google/callback',
-      passReqToCallback: false
-    }, async (accessToken: string, refreshToken: string, profile: GoogleProfile, done: (error: any, user?: User | null) => void) => {
+      passReqToCallback: true
+    }, async (req: any, accessToken: string, refreshToken: string, profile: Profile, done: VerifyCallback) => {
       try {
         let user = await storage.getUserByGoogleId(profile.id);
         if (!user) {
@@ -106,7 +104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (user) {
             // Only link Google ID if not already set
             if (!user.googleId) {
-              await storage.updateUser(user.id, { googleId: profile.id, isVerified: true });
+              await storage.updateUser(Number(user.id), { googleId: profile.id, isVerified: true });
               user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
             }
           } else {
@@ -122,7 +120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return done(null, user);
       } catch (error) {
-        return done(error, null);
+        return done(error, false);
       }
     }));
 
@@ -154,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (user) {
           // Only link GitHub ID if not already set
           if (!user.githubId) {
-            await storage.updateUser(user.id, { githubId: profile.id, isVerified: true });
+            await storage.updateUser(Number(user.id), { githubId: profile.id, isVerified: true });
             user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
         } else {
@@ -185,6 +183,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User already exists" });
       }
 
+      if (!password) {
+        return res.status(400).json({ message: "Password is required" });
+      }
       const hashedPassword = await hashPassword(password);
       const otp = generateOTP();
       const otpExpiry = getOTPExpiry();
@@ -272,7 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Verify the user
-      await storage.updateUser(user.id, {
+      await storage.updateUser(Number(user.id), {
         isVerified: true,
         otp: null,
         otpExpiry: null
@@ -318,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const otpExpiry = getOTPExpiry();
       
       // Update user with new OTP
-      await storage.updateUser(user.id, { otp, otpExpiry });
+      await storage.updateUser(Number(user.id), { otp, otpExpiry });
       
       // Send new OTP email
       await sendOTPVerificationEmail(email, otp);
@@ -609,7 +610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const chatSession = await storage.getProjectChatSession(parseInt(req.params.projectId));
       res.json(chatSession || { messages: [] });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
@@ -687,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fileName = command.split(' ')[1];
         const project = await storage.getUserProjects(req.user.id);
         if (project.length > 0) {
-          const files = project[0].files || {};
+          const files: Record<string, string> = project[0].files as Record<string, string> || {};
           result = files[fileName] || 'File not found';
         } else {
           result = 'File not found';

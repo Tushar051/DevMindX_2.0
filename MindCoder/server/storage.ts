@@ -5,13 +5,13 @@ import path from 'path';
 
 export interface IStorage {
   // User operations
-  getUser(id: number): Promise<User | undefined>;
+  getUser(id: number | string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
   getUserByGithubId(githubId: string): Promise<User | undefined>;
   createUser(user: InsertUser & { googleId?: string; githubId?: string; verificationToken?: string; otp?: string; otpExpiry?: Date }): Promise<User>;
-  updateUser(id: number, updates: Partial<User>): Promise<User>;
+  updateUser(id: number | string, updates: Partial<User>): Promise<User>;
   verifyUser(token: string): Promise<User | undefined>;
 
   // Project operations
@@ -37,7 +37,7 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<number, User> = new Map();
+  private users: Map<string | number, User> = new Map();
   private projects: Map<number, Project> = new Map();
   private chatSessions: Map<number, ChatSession> = new Map();
   private files: Map<string, any> = new Map();
@@ -45,7 +45,7 @@ export class MemStorage implements IStorage {
   private currentProjectId = 1;
   private currentChatId = 1;
 
-  async getUser(id: number): Promise<User | undefined> {
+  async getUser(id: number | string): Promise<User | undefined> {
     return this.users.get(id);
   }
 
@@ -84,7 +84,7 @@ export class MemStorage implements IStorage {
     return user;
   }
 
-  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+  async updateUser(id: number | string, updates: Partial<User>): Promise<User> {
     const user = this.users.get(id);
     if (!user) throw new Error('User not found');
     
