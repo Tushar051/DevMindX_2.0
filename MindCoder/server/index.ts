@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { connectToMongoDB } from './db';
+import { registerRoutes } from './routes.js';
+import { setupVite, serveStatic, log } from "./vite.js";
+import { connectToMongoDB } from './db.js';
 
 const app = express();
 app.use(express.json());
@@ -39,7 +39,7 @@ app.use((req, res, next) => {
 });
 
 // Connect to MongoDB at server startup
-connectToMongoDB().catch((err) => {
+connectToMongoDB().catch((err: any) => {
   console.error('Failed to connect to MongoDB:', err);
 });
 
@@ -58,6 +58,7 @@ connectToMongoDB().catch((err) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    const server = app.listen(); // Create server instance first
     await setupVite(app, server);
   } else {
     serveStatic(app);
@@ -68,7 +69,7 @@ connectToMongoDB().catch((err) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen(port, '0.0.0.0', () => {
+  app.listen(port, '0.0.0.0', () => {
     log(`serving on port ${port}`);
   });
 })();

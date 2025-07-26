@@ -17,7 +17,7 @@ export default function Landing() {
     {
       icon: <Brain className="w-8 h-8 text-blue-500" />,
       title: "Multiple AI Models",
-      description: "Choose from ChatGPT, Claude, and Gemini for code generation and assistance"
+      description: "Utilize Together AI for code generation and assistance"
     },
     {
       icon: <Code className="w-8 h-8 text-green-500" />,
@@ -38,25 +38,11 @@ export default function Landing() {
 
   const aiModels = [
     {
-      name: "ChatGPT",
-      provider: "OpenAI",
-      description: "GPT-4o for advanced code generation and problem solving",
-      capabilities: ["Code Generation", "Debugging", "Refactoring", "Documentation"],
-      badge: "Most Popular"
-    },
-    {
-      name: "Claude",
-      provider: "Anthropic",
-      description: "Claude Sonnet for reliable and thoughtful code assistance",
-      capabilities: ["Code Review", "Architecture Design", "Testing", "Optimization"],
-      badge: "Best for Complex Logic"
-    },
-    {
-      name: "Gemini",
-      provider: "Google",
-      description: "Gemini Pro for multimodal development assistance",
-      capabilities: ["Code Generation", "Image Analysis", "Multi-language", "Integration"],
-      badge: "Multimodal"
+      name: "Together AI",
+      provider: "Together AI",
+      description: "Open-source models for various development tasks",
+      capabilities: ["Code Generation", "Debugging", "Refactoring", "Documentation", "Code Review", "Architecture Design", "Testing", "Optimization", "Image Analysis", "Multi-language", "Integration"],
+      badge: "Unified AI"
     }
   ];
 

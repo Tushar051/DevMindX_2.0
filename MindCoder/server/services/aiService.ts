@@ -1,8 +1,7 @@
 // Note: OpenAI and Anthropic imports commented out until API keys are configured
-// import { generateProject as generateOpenAIProject, generateCode as generateOpenAICode, chatWithAI as chatWithOpenAI } from './openai';
-import { generateProjectWithGemini, generateCodeWithGemini, chatWithGemini, analyzeCodeWithGemini } from './gemini';
+import { generateProjectWithTogether, generateCodeWithTogether, chatWithTogether, analyzeCodeWithTogether } from './together.js';
 
-export type AIModel = 'openai' | 'gemini' | 'anthropic';
+export type AIModel = 'together';
 
 export interface AIResponse {
   content: string;
@@ -35,12 +34,8 @@ export async function generateProjectWithAI(request: ProjectGenerationRequest): 
   const { prompt, model, framework, name } = request;
 
   switch (model) {
-    case 'gemini':
-      return await generateProjectWithGemini(prompt);
-    case 'openai':
-      throw new Error('OpenAI API not configured yet');
-    case 'anthropic':
-      throw new Error('Claude API not configured yet');
+    case 'together':
+      return await generateProjectWithTogether(prompt);
     default:
       throw new Error(`Unsupported AI model: ${model}`);
   }
@@ -51,13 +46,9 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
   let content: string;
 
   switch (model) {
-    case 'gemini':
-      content = await generateCodeWithGemini(instruction, context);
+    case 'together':
+      content = await generateCodeWithTogether(instruction, context);
       break;
-    case 'openai':
-      throw new Error('OpenAI API not configured yet');
-    case 'anthropic':
-      throw new Error('Claude API not configured yet');
     default:
       throw new Error(`Unsupported AI model: ${model}`);
   }
@@ -70,17 +61,15 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
 }
 
 export async function chatWithAIModel(request: ChatRequest): Promise<AIResponse> {
+  console.log('chatWithAIModel called with request:', request);
+
   const { message, model, chatHistory, projectContext } = request;
   let content: string;
 
   switch (model) {
-    case 'gemini':
-      content = await chatWithGemini(message, chatHistory);
+    case 'together':
+      content = await chatWithTogether(message, chatHistory);
       break;
-    case 'openai':
-      throw new Error('OpenAI API not configured yet');
-    case 'anthropic':
-      throw new Error('Claude API not configured yet');
     default:
       throw new Error(`Unsupported AI model: ${model}`);
   }
@@ -96,13 +85,9 @@ export async function analyzeCodeWithAI(code: string, task: string, model: AIMod
   let content: string;
 
   switch (model) {
-    case 'gemini':
-      content = await analyzeCodeWithGemini(code, task);
+    case 'together':
+      content = await analyzeCodeWithTogether(code, task);
       break;
-    case 'openai':
-      throw new Error('OpenAI API not configured yet');
-    case 'anthropic':
-      throw new Error('Claude API not configured yet');
     default:
       throw new Error(`Unsupported AI model: ${model}`);
   }
@@ -117,22 +102,10 @@ export async function analyzeCodeWithAI(code: string, task: string, model: AIMod
 export function getAvailableModels(): { id: AIModel; name: string; description: string; available: boolean }[] {
   return [
     {
-      id: 'gemini',
-      name: 'Gemini Pro',
-      description: 'Google\'s advanced multimodal AI',
-      available: !!process.env.GEMINI_API_KEY
-    },
-    {
-      id: 'openai',
-      name: 'ChatGPT',
-      description: 'OpenAI\'s GPT-4o model',
-      available: !!process.env.OPENAI_API_KEY
-    },
-    {
-      id: 'anthropic',
-      name: 'Claude',
-      description: 'Anthropic\'s reasoning-focused AI',
-      available: !!process.env.ANTHROPIC_API_KEY
+      id: 'together',
+      name: 'Together AI',
+      description: 'Together AI\'s open-source models',
+      available: !!process.env.TOGETHER_API_KEY
     }
   ];
 }

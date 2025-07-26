@@ -1,5 +1,5 @@
-import { users, projects, chatSessions, type User, type InsertUser, type Project, type InsertProject, type ChatSession, type InsertChatSession } from "@shared/schema";
-import { connectToMongoDB } from './db';
+import { users, projects, chatSessions, type User, type InsertUser, type Project, type InsertProject, type ChatSession, type InsertChatSession } from "@shared/schema.js";
+import { connectToMongoDB } from './db.js';
 import { ObjectId } from 'mongodb';
 import path from 'path';
 

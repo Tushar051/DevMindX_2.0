@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { storage } from '../storage';
-import type { User } from '@shared/schema';
+import jwt from 'jsonwebtoken';
+import { storage } from '../storage.js';
+import type { User } from '@shared/schema.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || "QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "86400000";

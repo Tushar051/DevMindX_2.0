@@ -201,7 +201,7 @@ export default function IDE() {
             }),
           });
         } catch (error) {
-          console.log('Backend save failed, but file is saved locally');
+            console.log('Backend save failed, but file is saved locally');
         }
         
         toast({
@@ -409,16 +409,17 @@ export default function IDE() {
       // Get current file context
       const currentFileContent = selectedFile?.content || '';
       const currentFileName = selectedFile?.name || '';
-      
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+      const tokenToSend = localStorage.getItem('devmindx_token');
+          console.log('Attempting to send AI chat request with token:', tokenToSend);
+          const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+            },
         body: JSON.stringify({
           message,
-          model: 'gemini',
+          model: 'together',
           chatHistory: chatMessages.slice(-5), // Last 5 messages for context
           projectContext: {
             currentFile: currentFileName,
@@ -450,6 +451,7 @@ export default function IDE() {
         timestamp: new Date(),
       };
       setChatMessages(prev => [...prev, errorMessage]);
+      console.error('Client-side error in sendChatMessage:', error);
     } finally {
       setIsLoading(false);
     }
@@ -1161,7 +1163,12 @@ console.log('Hello from ${fileName}!');`;
   // When running a file
   const handleRunFile = async () => {
     if (!selectedFile) return;
-    setTerminalOutput([{ type: 'output' as const, value: 'Running...' }]);
+    setTerminalOutput([{ 
+      id: Date.now().toString(),
+      type: 'output' as const, 
+      content: 'Running...',
+      timestamp: new Date()
+    }]);
     try {
       const response = await fetch('/api/ide/run', {
         method: 'POST',
@@ -1181,7 +1188,12 @@ console.log('Hello from ${fileName}!');`;
       }
       setTerminalOutput(data.output.map((line: string) => ({ type: 'output' as const, value: line })));
     } catch (error) {
-      setTerminalOutput([{ type: 'output' as const, value: 'Error: Failed to run project' }]);
+      setTerminalOutput([{ 
+        id: Date.now().toString(),
+        type: 'output' as const, 
+        content: 'Error: Failed to run project',
+        timestamp: new Date()
+      }]);
     }
   };
 

@@ -1,17 +1,17 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { insertUserSchema, insertProjectSchema } from "@shared/schema";
-import { generateToken, hashPassword, authenticateUser, generateVerificationToken, verifyToken, generateOTP, getOTPExpiry } from "./services/auth";
-import { sendVerificationEmail, sendOTPVerificationEmail } from "./services/email";
-import { generateProject, generateCode, chatWithAI } from "./services/openai";
-import { generateProjectWithAI, generateCodeWithAI, chatWithAIModel, analyzeCodeWithAI, getAvailableModels } from "./services/aiService";
+import { storage } from "./storage.js";
+import { insertUserSchema, insertProjectSchema } from "../shared/schema";
+import { generateToken, hashPassword, authenticateUser, generateVerificationToken, verifyToken, generateOTP, getOTPExpiry } from "./services/auth.js";
+import { sendVerificationEmail, sendOTPVerificationEmail } from "./services/email.js";
+
+import { generateProjectWithAI, generateCodeWithAI, chatWithAIModel, analyzeCodeWithAI, getAvailableModels } from "./services/aiService.js";
 import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
  import session from 'express-session';
  import { User } from '../shared/schema';
-import { connectToMongoDB } from './db';
+import { connectToMongoDB } from './db.js';
  import { ObjectId } from 'mongodb';
 import { spawn, exec } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
@@ -280,7 +280,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Generate token for auto-login
-      const token = generateToken(user);
+      const token = generateToken({
+        ...user,
+        id: user.id.toString(),
+        password: user.password || '', // Ensure password is string, not null/undefined
+        isVerified: user.isVerified || false, // Ensure isVerified is always boolean
+      });
       
       res.json({
         message: "Email verified successfully.",
@@ -359,6 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Middleware to verify JWT token
   const authenticateToken = (req: any, res: any, next: any) => {
+    console.log('authenticateToken middleware entered');
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -370,25 +376,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: 'dev@example.com',
         isVerified: true
       };
+      console.log('Development mode: Mock user set:', req.user);
       return next();
     }
 
+    console.log('Token received by authenticateToken:', token);
     if (!token) {
+      console.log('No token provided. Access denied.');
       return res.status(401).json({ message: 'Access token required' });
     }
 
     try {
       const decoded = verifyToken(token);
       req.user = decoded;
+      console.log('Token authenticated. User:', req.user);
       next();
     } catch (error) {
+      console.log('Invalid token:', error);
       return res.status(403).json({ message: 'Invalid token' });
     }
+
+
   };
 
   // Project routes
   app.get("/api/projects", authenticateToken, async (req: any, res) => {
     try {
+      console.log('req.user in /api/projects:', req.user);
       const projects = await storage.getUserProjects(req.user.id);
       res.json(projects);
     } catch (error) {
@@ -414,7 +428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project generation with enhanced file structure
   app.post("/api/projects/generate", authenticateToken, async (req: any, res) => {
     try {
-      const { name, framework, description, model = 'gemini' } = req.body;
+      const { name, framework, description, model = 'together' } = req.body;
       
       const generatedProject = await generateProjectWithAI({
         prompt: description,
@@ -498,7 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ai/generate-code", authenticateToken, async (req: any, res) => {
     try {
-      const { instruction, model = 'gemini', context, language } = req.body;
+      const { instruction, model = 'together', context, language } = req.body;
       const result = await generateCodeWithAI({
         instruction,
         model,
@@ -514,7 +528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ai/chat", authenticateToken, async (req: any, res) => {
     try {
-      const { message, model = 'gemini', chatHistory, projectContext } = req.body;
+      const { message, model = 'together', chatHistory, projectContext } = req.body;
       
       // Enhanced context for better AI responses
       let enhancedPrompt = message;
@@ -550,7 +564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ai/analyze-code", authenticateToken, async (req: any, res) => {
     try {
-      const { code, task, model = 'gemini' } = req.body;
+      const { code, task, model = 'together' } = req.body;
       const result = await analyzeCodeWithAI(code, task, model);
       res.json(result);
     } catch (error) {
@@ -563,7 +577,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/generate-code", authenticateToken, async (req: any, res) => {
     try {
       const { prompt, context } = req.body;
-      const code = await generateCode(prompt, context);
+      const code = await generateCodeWithAI({
+        instruction: prompt,
+        context,
+        model: 'together'
+      });
       res.json({ code });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -573,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ai/chat", authenticateToken, async (req: any, res) => {
     try {
-      const { message, projectId, conversationHistory } = req.body;
+      const { message, projectId, conversationHistory, model = 'together' } = req.body;
       
       let chatSession = null;
       if (projectId) {
@@ -587,7 +605,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const response = await chatWithAI(message, conversationHistory);
+      const response = await chatWithAIModel({
+        message,
+        chatHistory: conversationHistory,
+        model: 'together'
+      });
       
       if (chatSession) {
         const updatedMessages = [
