@@ -23,7 +23,9 @@ export async function generateProjectWithGemini(prompt: string): Promise<any> {
       }
     }
     
-    Create a realistic, functional project with proper file structure, dependencies, and working code.`;
+    Create a realistic, functional project with proper file structure, dependencies, and working code.
+    Include all necessary files like package.json, README.md, and proper folder structure.
+    Make sure the code is complete and runnable.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
@@ -46,7 +48,8 @@ export async function generateCodeWithGemini(instruction: string, context?: stri
     const systemPrompt = `You are an expert programmer. Generate clean, well-documented code based on the user's instruction.
     ${context ? `Current project context: ${context}` : ''}
     
-    Provide only the code without explanations unless specifically asked.`;
+    Provide only the code without explanations unless specifically asked.
+    Make sure the code is complete and functional.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -69,8 +72,10 @@ export async function chatWithGemini(message: string, chatHistory?: any[]): Prom
     - Architecture suggestions
     - Best practices
     - Problem solving
+    - File and project structure recommendations
     
-    Be concise and practical in your responses.`;
+    Be concise and practical in your responses. When suggesting code changes, provide complete, working code.
+    Consider the current file context and project structure when giving advice.`;
 
     const contents = chatHistory && chatHistory.length > 0 
       ? [...chatHistory.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] })), { role: "user", parts: [{ text: message }] }]
@@ -99,7 +104,10 @@ export async function analyzeCodeWithGemini(code: string, task: string): Promise
     - Bug detection
     - Performance optimization
     - Refactoring suggestions
-    - Documentation generation`;
+    - Documentation generation
+    - Security analysis
+    
+    Provide specific, actionable feedback with code examples when appropriate.`;
 
     const prompt = `Task: ${task}\n\nCode:\n\`\`\`\n${code}\n\`\`\``;
 

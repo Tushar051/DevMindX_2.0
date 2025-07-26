@@ -149,7 +149,7 @@ export default function Landing() {
                 onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
               >
-                {isAuthenticated ? "Go to IDE" : "Launch IDE"}
+                {isAuthenticated ? "Launch AI IDE" : "Launch AI IDE"}
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
               <Button
