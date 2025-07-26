@@ -52,7 +52,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
     const transporter = createTransporter();
     
     // In development mode, log the email instead of sending it
-    if (!transporter && isDev) {
+    if (!transporter) {
       console.log('==== VERIFICATION EMAIL (DEV MODE) ====');
       console.log(`To: ${email}`);
       console.log(`Verification URL: ${verificationUrl}`);
@@ -98,7 +98,7 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
     const transporter = createTransporter();
     
     // In development mode, log the email instead of sending it
-    if (!transporter && isDev) {
+    if (!transporter) {
       console.log('==== PASSWORD RESET EMAIL (DEV MODE) ====');
       console.log(`To: ${email}`);
       console.log(`Reset URL: ${resetUrl}`);
@@ -139,7 +139,7 @@ export async function sendOTPVerificationEmail(email: string, otp: string): Prom
     const transporter = createTransporter();
     
     // In development mode, log the email instead of sending it
-    if (!transporter && isDev) {
+    if (!transporter) {
       console.log('==== OTP VERIFICATION EMAIL (DEV MODE) ====');
       console.log(`To: ${email}`);
       console.log(`OTP Code: ${otp}`);

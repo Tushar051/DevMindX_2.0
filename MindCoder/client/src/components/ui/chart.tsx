@@ -76,28 +76,47 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null
   }
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
+  // Create a trusted style element with CSS variables for chart colors
+  const styleContent = Object.entries(THEMES)
+    .map(
+      ([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
+.map(([key, itemConfig]) => {
+  const color =
+    itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+    itemConfig.color
+  return color ? `  --color-${key}: ${color};` : null
+})
+.join("\n")}
 }
 `
-          )
-          .join("\n"),
-      }}
-    />
-  )
+    )
+    .join("\n");
+
+  // Use a ref to create and manage the style element
+  const styleRef = React.useRef<HTMLStyleElement | null>(null);
+  
+  React.useEffect(() => {
+    // Create the style element if it doesn't exist
+    if (!styleRef.current) {
+      styleRef.current = document.createElement('style');
+      document.head.appendChild(styleRef.current);
+    }
+    
+    // Set the content
+    styleRef.current.textContent = styleContent;
+    
+    // Cleanup on unmount
+    return () => {
+      if (styleRef.current) {
+        document.head.removeChild(styleRef.current);
+        styleRef.current = null;
+      }
+    };
+  }, [styleContent]);
+  
+  return null;
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip

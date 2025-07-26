@@ -1,4 +1,4 @@
- import { useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -103,9 +103,14 @@ export default function Landing() {
             <div className="flex items-center space-x-4">
               {isAuthenticated ? (
                 <>
-                  <Button onClick={() => navigate('/ide')} className="bg-blue-600 hover:bg-blue-700">
-                    Go to IDE
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button onClick={() => navigate('/ide')} className="bg-blue-600 hover:bg-blue-700">
+                      Go to IDE
+                    </Button>
+                    <Button onClick={() => navigate('/cursor-ide')} className="bg-purple-600 hover:bg-purple-700">
+                      Cursor IDE
+                    </Button>
+                  </div>
                   <UserProfile />
                 </>
               ) : (
@@ -138,14 +143,24 @@ export default function Landing() {
             Our AI IDE supports multiple LLM models and generates production-ready code instantly.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Button
-              size="lg"
-              onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
-            >
-              {isAuthenticated ? "Go to IDE" : "Launch IDE"}
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                size="lg"
+                onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
+              >
+                {isAuthenticated ? "Go to IDE" : "Launch IDE"}
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+              <Button
+                size="lg"
+                onClick={isAuthenticated ? () => navigate('/cursor-ide') : () => setShowAuthModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-lg px-8 py-4"
+              >
+                {isAuthenticated ? "Try Cursor IDE" : "Try Cursor IDE"}
+                <Sparkles className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
             <Button 
               size="lg" 
               variant="outline" 
@@ -262,14 +277,24 @@ export default function Landing() {
           <p className="text-xl text-gray-300 mb-8">
             Join thousands of developers who are already building with AI-powered tools
           </p>
-          <Button
-            size="lg"
-            onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-lg px-12 py-4"
-          >
-            {isAuthenticated ? "Go to Your IDE" : "Start Building Now"}
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button
+              size="lg"
+              onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-lg px-12 py-4"
+            >
+              {isAuthenticated ? "Go to Your IDE" : "Start Building Now"}
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+            <Button
+              size="lg"
+              onClick={isAuthenticated ? () => navigate('/cursor-ide') : () => setShowAuthModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-lg px-12 py-4"
+            >
+              {isAuthenticated ? "Try Cursor IDE" : "Try Cursor IDE"}
+              <Sparkles className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
           <div className="mt-8 flex items-center justify-center space-x-6 text-sm text-gray-400">
             <div className="flex items-center">
               <CheckCircle className="w-4 h-4 mr-2 text-green-400" />

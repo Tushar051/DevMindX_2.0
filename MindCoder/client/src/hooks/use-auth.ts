@@ -24,8 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Check for token in sessionStorage on mount (will be cleared when browser is closed)
-    const storedToken = sessionStorage.getItem('devmindx_token');
-    const storedUser = sessionStorage.getItem('devmindx_user');
+    const storedToken = localStorage.getItem('devmindx_token');
+    const storedUser = localStorage.getItem('devmindx_user');
     
     if (storedToken && storedUser) {
       try {
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(JSON.parse(storedUser));
       } catch (error) {
         // Clear invalid data
-        sessionStorage.removeItem('devmindx_token');
-        sessionStorage.removeItem('devmindx_user');
+        localStorage.removeItem('devmindx_token');
+        localStorage.removeItem('devmindx_user');
       }
     }
 
@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Check token validity on mount
     const checkToken = async () => {
-      const storedToken = sessionStorage.getItem('devmindx_token');
+      const storedToken = localStorage.getItem('devmindx_token');
       if (storedToken) {
         try {
           const res = await fetch('/api/projects', {
@@ -98,15 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
-    sessionStorage.setItem('devmindx_token', newToken);
-    sessionStorage.setItem('devmindx_user', JSON.stringify(newUser));
+    localStorage.setItem('devmindx_token', newToken);
+    localStorage.setItem('devmindx_user', JSON.stringify(newUser));
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
-    sessionStorage.removeItem('devmindx_token');
-    sessionStorage.removeItem('devmindx_user');
+    localStorage.removeItem('devmindx_token');
+    localStorage.removeItem('devmindx_user');
     toast({
       title: "Logged out",
       description: "You have been successfully logged out.",

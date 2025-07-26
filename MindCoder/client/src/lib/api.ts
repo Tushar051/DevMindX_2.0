@@ -72,13 +72,28 @@ export const projectsApi = {
 
 // AI API
 export const aiApi = {
-  generateCode: async (prompt: string, context?: string): Promise<{ code: string }> => {
-    const response = await apiRequest('POST', '/api/ai/generate-code', { prompt, context });
+  getModels: async (): Promise<{ models: string[] }> => {
+    const response = await apiRequest('GET', '/api/ai/models');
     return response.json();
   },
 
-  chat: async (message: string, projectId?: number, conversationHistory?: any[]): Promise<{ response: string }> => {
-    const response = await apiRequest('POST', '/api/ai/chat', { message, projectId, conversationHistory });
+  generateCode: async (instruction: string, model: string = 'gemini', context?: string, language?: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ai/generate-code', { instruction, model, context, language });
+    return response.json();
+  },
+
+  generateProject: async (prompt: string, model: string = 'gemini', framework?: string, name?: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ai/generate-code', { instruction: prompt, model, context: framework, language: name });
+    return response.json();
+  },
+
+  chat: async (message: string, model: string = 'gemini', chatHistory?: any[], projectContext?: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ai/chat', { message, model, chatHistory, projectContext });
+    return response.json();
+  },
+
+  analyzeCode: async (code: string, task: string, model: string = 'gemini'): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ai/analyze-code', { code, task, model });
     return response.json();
   },
 
