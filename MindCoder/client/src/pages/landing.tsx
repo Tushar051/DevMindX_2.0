@@ -2,14 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AuthModal } from "@/components/auth-modal";
 import { UserProfile } from "@/components/user-profile";
 import { Code, Brain, Zap, Users, CheckCircle, Star, ArrowRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
 
 export default function Landing() {
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -93,16 +91,18 @@ export default function Landing() {
                     <Button onClick={() => navigate('/ide')} className="bg-blue-600 hover:bg-blue-700">
                       Go to IDE
                     </Button>
-                    <Button onClick={() => navigate('/cursor-ide')} className="bg-purple-600 hover:bg-purple-700">
-                      Cursor IDE
-                    </Button>
                   </div>
                   <UserProfile />
                 </>
               ) : (
-                <Button onClick={() => setShowAuthModal(true)} className="bg-blue-600 hover:bg-blue-700">
-                  Get Started
-                </Button>
+                <>
+                  <Button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-700">
+                    Login
+                  </Button>
+                  <Button onClick={() => navigate('/signup')} className="bg-purple-600 hover:bg-purple-700 ml-2">
+                    Sign Up
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -129,24 +129,14 @@ export default function Landing() {
             Our AI IDE supports multiple LLM models and generates production-ready code instantly.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
-              >
-                {isAuthenticated ? "Launch AI IDE" : "Launch AI IDE"}
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-              <Button
-                size="lg"
-                onClick={isAuthenticated ? () => navigate('/cursor-ide') : () => setShowAuthModal(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-lg px-8 py-4"
-              >
-                {isAuthenticated ? "Try Cursor IDE" : "Try Cursor IDE"}
-                <Sparkles className="w-5 h-5 ml-2" />
-              </Button>
-            </div>
+            <Button
+              size="lg"
+              onClick={isAuthenticated ? () => navigate('/ide') : () => navigate('/login')}
+              className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
+            >
+              {isAuthenticated ? "Launch AI IDE" : "Launch AI IDE"}
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
             <Button 
               size="lg" 
               variant="outline" 
@@ -266,7 +256,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
               size="lg"
-              onClick={isAuthenticated ? () => navigate('/ide') : () => setShowAuthModal(true)}
+              onClick={isAuthenticated ? () => navigate('/ide') : () => navigate('/login')}
               className="bg-blue-600 hover:bg-blue-700 text-lg px-12 py-4"
             >
               {isAuthenticated ? "Go to Your IDE" : "Start Building Now"}
@@ -274,7 +264,7 @@ export default function Landing() {
             </Button>
             <Button
               size="lg"
-              onClick={isAuthenticated ? () => navigate('/cursor-ide') : () => setShowAuthModal(true)}
+              onClick={isAuthenticated ? () => navigate('/cursor-ide') : () => navigate('/login')}
               className="bg-purple-600 hover:bg-purple-700 text-lg px-12 py-4"
             >
               {isAuthenticated ? "Try Cursor IDE" : "Try Cursor IDE"}
@@ -344,9 +334,6 @@ export default function Landing() {
           </div>
         </div>
       </footer>
-
-      {/* Auth Modal */}
-      <AuthModal open={showAuthModal} onOpenChange={setShowAuthModal} />
     </div>
   );
 }

@@ -15,9 +15,9 @@ export async function generateProjectWithTogether(prompt: string): Promise<strin
   const response = await together.chat.completions.create({
     model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
     messages: [
-      SYSTEM_PROMPT,
-      { role: 'user', content: `Generate a complete project structure and main code logic based on this prompt:\n\n"${prompt}"` },
-    ],
+        { role: SYSTEM_PROMPT.role as 'system', content: SYSTEM_PROMPT.content },
+        { role: 'user', content: `Generate a complete project structure and main code logic based on this prompt:\n\n"${prompt}"` },
+      ],
     max_tokens: 2048,
   });
 
@@ -32,7 +32,10 @@ export async function generateCodeWithTogether(instruction: string, context?: st
 
   const response = await together.chat.completions.create({
     model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-    messages: [SYSTEM_PROMPT, { role: 'user', content: userPrompt }],
+    messages: [
+      { role: SYSTEM_PROMPT.role as 'system', content: SYSTEM_PROMPT.content },
+      { role: 'user', content: userPrompt }
+    ],
     max_tokens: 1024,
   });
 
@@ -43,13 +46,21 @@ export async function generateCodeWithTogether(instruction: string, context?: st
 export async function chatWithTogether(message: string, chatHistory: { role: 'user' | 'assistant'; content: string }[] = []): Promise<string> {
   const messages = [SYSTEM_PROMPT, ...chatHistory, { role: 'user', content: message }];
 
-  const response = await together.chat.completions.create({
-    model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-    messages,
-    max_tokens: 1024,
-  });
+  try {
+    const response = await together.chat.completions.create({
+      model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      messages: messages.map(msg => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content
+      })),
+      max_tokens: 1024,
+    });
 
-  return response.choices?.[0]?.message?.content?.trim() || '[No reply from assistant]';
+    return response.choices?.[0]?.message?.content?.trim() || '[No reply from assistant]';
+  } catch (error) {
+    console.error('Error calling Together AI chat:', error);
+    throw error; // Re-throw the error so it propagates up
+  }
 }
 
 // --- 4. Analyze Code for a Given Task (e.g., Explain, Refactor, Debug) ---
@@ -58,7 +69,10 @@ export async function analyzeCodeWithTogether(code: string, task: string): Promi
 
   const response = await together.chat.completions.create({
     model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-    messages: [SYSTEM_PROMPT, { role: 'user', content: formattedPrompt }],
+    messages: [
+      { role: SYSTEM_PROMPT.role as 'system', content: SYSTEM_PROMPT.content },
+      { role: 'user', content: formattedPrompt }
+    ],
     max_tokens: 1024,
   });
 

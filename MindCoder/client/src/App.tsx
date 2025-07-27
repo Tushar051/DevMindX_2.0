@@ -1,4 +1,4 @@
-// import { Switch, Route } from "wouter";
+// import { Switch, Route, useLocation } from "wouter";
 // import { queryClient } from "./lib/queryClient";
 // import { QueryClientProvider } from "@tanstack/react-query";
 // import { Toaster } from "@/components/ui/toaster";
@@ -6,21 +6,21 @@
 // import { AuthProvider, useAuth } from "@/hooks/use-auth";
 // import IDE from "@/pages/ide";
 // import Landing from "@/pages/landing";
+// import { LoginPage } from "@/pages/login";
+// import SignupPage from "@/pages/signup";
 // import NotFound from "@/pages/not-found";
 // import { useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
 
 // function AppContent() {
 //   const { isAuthenticated } = useAuth();
-//   const navigate = useNavigate();
+//   const [location, setLocation] = useLocation();
 
 //   // Check if the user is trying to access the IDE directly
 //   useEffect(() => {
-//     const path = window.location.pathname;
-//     if (path === '/ide' && !isAuthenticated) {
-//       navigate('/');
+//     if (location === '/ide' && !isAuthenticated) {
+//       setLocation('/');
 //     }
-//   }, [isAuthenticated, navigate]);
+//   }, [isAuthenticated, location, setLocation]);
 
 //   return (
 //     <Switch>
@@ -29,6 +29,12 @@
 //       </Route>
 //       <Route path="/ide">
 //         {() => isAuthenticated ? <IDE /> : <Landing />}
+//       </Route>
+//       <Route path="/login">
+//         {() => <LoginPage />}
+//       </Route>
+//       <Route path="/signup">
+//         {() => <SignupPage />}
 //       </Route>
 //       <Route component={NotFound} />
 //     </Switch>
@@ -56,6 +62,7 @@
 
 // export default App;
 
+
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -64,6 +71,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import IDE from "@/pages/ide";
 import Landing from "@/pages/landing";
+import LoginPage from "@/pages/login";
+import SignupPage from "@/pages/signup";
 import NotFound from "@/pages/not-found";
 import { useEffect } from 'react';
 
@@ -85,6 +94,12 @@ function AppContent() {
       </Route>
       <Route path="/ide">
         {() => isAuthenticated ? <IDE /> : <Landing />}
+      </Route>
+      <Route path="/login">
+        {() => <LoginPage />}
+      </Route>
+      <Route path="/signup">
+        {() => <SignupPage />}
       </Route>
       <Route component={NotFound} />
     </Switch>
