@@ -438,7 +438,7 @@ export default function IDE() {
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || data.message || 'I apologize, but I couldn\'t process your request.',
+        content: data.content || 'I apologize, but I couldn\'t process your request.',
         timestamp: new Date(),
       };
 

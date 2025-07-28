@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertUserSchema, insertProjectSchema } from "../shared/schema";
+import { insertUserSchema, insertProjectSchema } from "../shared/schema.js";
 import { generateToken, hashPassword, authenticateUser, generateVerificationToken, verifyToken, generateOTP, getOTPExpiry } from "./services/auth.js";
 import { sendVerificationEmail, sendOTPVerificationEmail } from "./services/email.js";
 
@@ -9,10 +9,10 @@ import { generateProjectWithAI, generateCodeWithAI, chatWithAIModel, analyzeCode
 import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
- import session from 'express-session';
- import { User } from '../shared/schema';
+import session from 'express-session';
+import { User } from '../shared/schema.js';
 import { connectToMongoDB } from './db.js';
- import { ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { spawn, exec } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -89,40 +89,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     verificationToken?: string;
   }
 
-
-    passport.use(new GoogleStrategy({
-      clientID: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/auth/google/callback',
-      passReqToCallback: true
-    }, async (req: any, accessToken: string, refreshToken: string, profile: Profile, done: VerifyCallback) => {
-      try {
-        let user = await storage.getUserByGoogleId(profile.id);
-        if (!user) {
-          // Try to find by email
-          user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
-          if (user) {
-            // Only link Google ID if not already set
-            if (!user.googleId) {
-              await storage.updateUser(Number(user.id), { googleId: profile.id, isVerified: true });
-              user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
-            }
-          } else {
-            // Create new user if not found
-            user = await storage.createUser({
-              username: profile.displayName || profile.emails?.[0]?.value?.split('@')[0] || `user_${profile.id}`,
-              email: profile.emails?.[0]?.value || '',
-              password: null,
-              googleId: profile.id,
-              isVerified: true
-            } as UserCreate);
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/auth/google/callback',
+    passReqToCallback: true
+  }, async (req: any, accessToken: string, refreshToken: string, profile: Profile, done: VerifyCallback) => {
+    try {
+      let user = await storage.getUserByGoogleId(profile.id);
+      if (!user) {
+        // Try to find by email
+        user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
+        if (user) {
+          // Only link Google ID if not already set
+          if (!user.googleId) {
+            await storage.updateUser(Number(user.id), { googleId: profile.id, isVerified: true });
+            user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
+        } else {
+          // Create new user if not found
+          user = await storage.createUser({
+            username: profile.displayName || profile.emails?.[0]?.value?.split('@')[0] || `user_${profile.id}`,
+            email: profile.emails?.[0]?.value || '',
+            password: null,
+            googleId: profile.id,
+            isVerified: true
+          } as UserCreate);
         }
-        return done(null, user);
-      } catch (error) {
-        return done(error, false);
       }
-    }));
+      return done(null, user);
+    } catch (error) {
+      return done(error, false);
+    }
+  }));
 
   // GitHub OAuth Strategy
   interface GitHubProfile {
@@ -206,6 +205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: user.email
       });
     } catch (error) {
+      console.error('Signup error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(400).json({ message: errorMessage });
     }
@@ -226,6 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } 
       });
     } catch (error) {
+      console.error('Login error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
       res.status(401).json({ message: errorMessage });
     }
@@ -242,6 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ message: "Email verified successfully. You can now log in." });
     } catch (error) {
+      console.error('Verify error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(400).json({ message: errorMessage });
     }
@@ -283,8 +285,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = generateToken({
         ...user,
         id: user.id.toString(),
-        password: user.password || '', // Ensure password is string, not null/undefined
-        isVerified: user.isVerified || false, // Ensure isVerified is always boolean
+        password: user.password || '',
+        isVerified: user.isVerified || false,
       });
       
       res.json({
@@ -297,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
+      console.error('Verify OTP error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(400).json({ message: errorMessage });
     }
@@ -395,8 +398,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Invalid token:', error);
       return res.status(403).json({ message: 'Invalid token' });
     }
-
-
   };
 
   // Project routes
@@ -406,6 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const projects = await storage.getUserProjects(req.user.id);
       res.json(projects);
     } catch (error) {
+      console.error('Get projects error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -420,6 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.status(201).json(project);
     } catch (error) {
+      console.error('Create project error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Invalid project data';
       res.status(400).json({ message: errorMessage });
     }
@@ -429,6 +432,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/projects/generate", authenticateToken, async (req: any, res) => {
     try {
       const { name, framework, description, model = 'together' } = req.body;
+      
+      console.log('Generating project with:', { name, framework, description, model });
       
       const generatedProject = await generateProjectWithAI({
         prompt: description,
@@ -451,6 +456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         files: generatedProject.files || {}
       });
     } catch (error) {
+      console.error('Generate project error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -464,6 +470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(project);
     } catch (error) {
+      console.error('Get project error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -479,6 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedProject = await storage.updateProject(parseInt(req.params.id), req.body);
       res.json(updatedProject);
     } catch (error) {
+      console.error('Update project error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -494,6 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteProject(parseInt(req.params.id));
       res.json({ message: "Project deleted successfully" });
     } catch (error) {
+      console.error('Delete project error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -505,6 +514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const models = getAvailableModels();
       res.json(models);
     } catch (error) {
+      console.error('Get models error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -513,14 +523,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/generate-code", authenticateToken, async (req: any, res) => {
     try {
       const { instruction, model = 'together', context, language } = req.body;
+      
+      console.log('Generating code with:', { instruction, model, context, language });
+      
+      if (!instruction) {
+        return res.status(400).json({ message: 'Instruction is required' });
+      }
+
       const result = await generateCodeWithAI({
         instruction,
         model,
         context,
         language
       });
+      
       res.json(result);
     } catch (error) {
+      console.error('Generate code error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -529,6 +548,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/chat", authenticateToken, async (req: any, res) => {
     try {
       const { message, model = 'together', chatHistory, projectContext } = req.body;
+      
+      console.log('AI Chat request:', { message, model, hasProjectContext: !!projectContext });
+      
+      if (!message) {
+        return res.status(400).json({ message: 'Message is required' });
+      }
       
       // Enhanced context for better AI responses
       let enhancedPrompt = message;
@@ -557,6 +582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(result);
     } catch (error) {
+      console.error('Chat error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
@@ -565,85 +591,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/analyze-code", authenticateToken, async (req: any, res) => {
     try {
       const { code, task, model = 'together' } = req.body;
+      
+      if (!code || !task) {
+        return res.status(400).json({ message: 'Code and task are required' });
+      }
+      
       const result = await analyzeCodeWithAI(code, task, model);
       res.json(result);
     } catch (error) {
+      console.error('Analyze code error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
   });
 
-  // AI routes
-  app.post("/api/ai/generate-code", authenticateToken, async (req: any, res) => {
-    try {
-      const { prompt, context } = req.body;
-      const code = await generateCodeWithAI({
-        instruction: prompt,
-        context,
-        model: 'together'
-      });
-      res.json({ code });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      res.status(500).json({ message: errorMessage });
-    }
-  });
-
-  app.post("/api/ai/chat", authenticateToken, async (req: any, res) => {
-    try {
-      const { message, projectId, conversationHistory, model = 'together' } = req.body;
-      
-      let chatSession = null;
-      if (projectId) {
-        chatSession = await storage.getProjectChatSession(projectId);
-        if (!chatSession) {
-          chatSession = await storage.createChatSession({
-            userId: req.user.id,
-            projectId,
-            messages: []
-          });
-        }
-      }
-
-      const response = await chatWithAIModel({
-        message,
-        chatHistory: conversationHistory,
-        model: 'together'
-      });
-      
-      if (chatSession) {
-        const updatedMessages = [
-          ...(chatSession.messages as any[]),
-          { role: 'user', content: message, timestamp: new Date() },
-          { role: 'assistant', content: response, timestamp: new Date() }
-        ];
-        
-        await storage.updateChatSession(chatSession.id, { messages: updatedMessages });
-      }
-
-      res.json({ response });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      res.status(500).json({ message: errorMessage });
-    }
-  });
-
+  // Chat routes with better error handling
   app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
     try {
       const chatSession = await storage.getProjectChatSession(parseInt(req.params.projectId));
       res.json(chatSession || { messages: [] });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get chat error:', error);
+      res.status(500).json({ message: error.message || 'Failed to get chat session' });
     }
   });
 
-  // IDE-specific routes
+  // IDE-specific routes with better error handling
   app.post("/api/ide/files", authenticateToken, async (req: any, res) => {
     try {
       const { action, filePath, content, newPath } = req.body;
       
-      // For now, we'll just return success responses
-      // In a real implementation, this would interact with the file system
+      if (!action || !filePath) {
+        return res.status(400).json({ message: 'Action and filePath are required' });
+      }
+      
       switch (action) {
         case 'create':
           res.json({ message: "File created successfully", path: filePath });
@@ -658,6 +639,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
           
         case 'rename':
+          if (!newPath) {
+            return res.status(400).json({ message: 'newPath is required for rename action' });
+          }
           res.json({ message: "File renamed successfully", oldPath: filePath, newPath });
           break;
           
@@ -665,6 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.status(400).json({ message: "Invalid action" });
       }
     } catch (error) {
+      console.error('File operation error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
       res.status(500).json({ message: errorMessage });
     }
