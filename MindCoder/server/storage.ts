@@ -291,17 +291,96 @@ class MongoStorage implements IStorage {
     return undefined;
   }
 
-  // Project and chat methods can fallback to MemStorage for now
-  getProject = MemStorage.prototype.getProject;
-  getUserProjects = MemStorage.prototype.getUserProjects;
-  createProject = MemStorage.prototype.createProject;
-  updateProject = MemStorage.prototype.updateProject;
-  deleteProject = MemStorage.prototype.deleteProject;
-  getChatSession = MemStorage.prototype.getChatSession;
-  getUserChatSessions = MemStorage.prototype.getUserChatSessions;
-  getProjectChatSession = MemStorage.prototype.getProjectChatSession;
-  createChatSession = MemStorage.prototype.createChatSession;
-  updateChatSession = MemStorage.prototype.updateChatSession;
+  // Project operations
+  async getProject(id: number): Promise<Project | undefined> {
+    const db = await connectToMongoDB();
+    const project = await db.collection('projects').findOne({ id });
+    return project as unknown as Project | undefined;
+  }
+
+  async getUserProjects(userId: number): Promise<Project[]> {
+    const db = await connectToMongoDB();
+    const projects = await db.collection('projects').find({ userId }).toArray();
+    return projects as unknown as Project[];
+  }
+
+  async createProject(insertProject: InsertProject & { userId: number; files?: any }): Promise<Project> {
+    const db = await connectToMongoDB();
+    // Find max id for auto-increment
+    const lastProject = await db.collection('projects').find().sort({ id: -1 }).limit(1).toArray();
+    const id = lastProject.length > 0 ? lastProject[0].id + 1 : 1;
+    const project: Project = {
+      id,
+      name: insertProject.name,
+      description: insertProject.description || null,
+      framework: insertProject.framework,
+      userId: insertProject.userId,
+      files: insertProject.files || {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection('projects').insertOne(project);
+    return project;
+  }
+
+  async updateProject(id: number, updates: Partial<Project>): Promise<Project> {
+    const db = await connectToMongoDB();
+    await db.collection('projects').updateOne(
+      { id },
+      { $set: { ...updates, updatedAt: new Date() } }
+    );
+    const updatedProject = await db.collection('projects').findOne({ id });
+    if (!updatedProject) throw new Error('Project not found');
+    return updatedProject as unknown as Project;
+  }
+
+  async deleteProject(id: number): Promise<void> {
+    const db = await connectToMongoDB();
+    await db.collection('projects').deleteOne({ id });
+  }
+
+  // Chat operations
+  async getChatSession(id: number): Promise<ChatSession | undefined> {
+    const db = await connectToMongoDB();
+    const session = await db.collection('chatSessions').findOne({ id });
+    return session as unknown as ChatSession | undefined;
+  }
+
+  async getUserChatSessions(userId: number): Promise<ChatSession[]> {
+    const db = await connectToMongoDB();
+    const sessions = await db.collection('chatSessions').find({ userId }).toArray();
+    return sessions as unknown as ChatSession[];
+  }
+
+  async getProjectChatSession(projectId: number): Promise<ChatSession | undefined> {
+    const db = await connectToMongoDB();
+    const session = await db.collection('chatSessions').findOne({ projectId });
+    return session as unknown as ChatSession | undefined;
+  }
+
+  async createChatSession(insertSession: InsertChatSession & { userId: number }): Promise<ChatSession> {
+    const db = await connectToMongoDB();
+    // Find max id for auto-increment
+    const lastSession = await db.collection('chatSessions').find().sort({ id: -1 }).limit(1).toArray();
+    const id = lastSession.length > 0 ? lastSession[0].id + 1 : 1;
+    const session: ChatSession = {
+      id,
+      userId: insertSession.userId,
+      projectId: insertSession.projectId || null,
+      messages: insertSession.messages || [],
+      createdAt: new Date(),
+    };
+    await db.collection('chatSessions').insertOne(session);
+    return session;
+  }
+
+  async updateChatSession(id: number, updates: Partial<ChatSession>): Promise<ChatSession> {
+    const db = await connectToMongoDB();
+    await db.collection('chatSessions').updateOne({ id }, { $set: updates });
+    const updatedSession = await db.collection('chatSessions').findOne({ id });
+    if (!updatedSession) throw new Error('Chat session not found');
+    return updatedSession as unknown as ChatSession;
+  }
 
   // File operations
   async createFile(file: { userId: number; path: string; content?: string; type: 'file' | 'folder' }): Promise<any> {
@@ -354,5 +433,27 @@ class MongoStorage implements IStorage {
   }
 }
 
-export const storage = new MongoStorage();
+// Initialize storage with fallback to MemStorage if MongoDB fails
+let storage: IStorage;
+
+async function initializeStorage() {
+  try {
+    const db = await connectToMongoDB();
+    await db.command({ ping: 1 }); // Test the connection
+    console.log('MongoDB connection successful, using MongoStorage');
+    storage = new MongoStorage();
+  } catch (error) {
+    console.warn('Failed to connect to MongoDB, falling back to MemStorage:', error);
+    storage = new MemStorage();
+  }
+}
+
+// Initialize storage
+initializeStorage().catch(error => {
+  console.error('Failed to initialize storage:', error);
+  // Fallback to MemStorage if initialization fails
+  storage = new MemStorage();
+});
+
+export { storage };
 

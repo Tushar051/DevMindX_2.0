@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+
+
 import { 
   Folder, 
   File, 
@@ -101,6 +103,11 @@ export default function IDE() {
   const chatRef = useRef<HTMLDivElement>(null);
   const [showAIChat, setShowAIChat] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
+  const [showGenerateProjectModal, setShowGenerateProjectModal] = useState(false);
+  const [projectPrompt, setProjectPrompt] = useState('');
+  const [projectFramework, setProjectFramework] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [isGeneratingProject, setIsGeneratingProject] = useState(false);
 
   // Initialize with empty workspace
   useEffect(() => {
@@ -200,7 +207,7 @@ export default function IDE() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
             },
             body: JSON.stringify({
               action: 'update',
@@ -269,7 +276,7 @@ export default function IDE() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
       },
       body: JSON.stringify({
         path: newFile.path,
@@ -591,6 +598,164 @@ export default function IDE() {
     });
   };
 
+  const handleGenerateProject = async () => {
+    if (!projectPrompt.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a project description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingProject(true);
+
+    try {
+      const response = await fetch('/api/projects/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
+        body: JSON.stringify({
+          name: projectName.trim() || 'Generated Project',
+          framework: projectFramework.trim() || undefined,
+          description: projectPrompt.trim(),
+          model: 'together'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate project');
+      }
+
+      const data = await response.json();
+      
+      // Clear existing files
+      setFileTree([]);
+      setOpenFiles([]);
+      setSelectedFile(null);
+      setActiveTab('');
+
+      // Create files from the response
+      const files = data.files || {};
+      const newFileTree: FileNode[] = [];
+
+      // Process files and create directory structure
+      Object.entries(files).forEach(([path, content]) => {
+        // Normalize path to use forward slashes and remove any leading/trailing slashes
+        const normalizedPath = path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+        const parts = normalizedPath.split('/');
+        const fileName = parts.pop() || '';
+        const dirPath = parts.join('/');
+
+        // Create directories if needed
+        let currentPath = '';
+        let currentTree = newFileTree;
+
+        for (const part of parts) {
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          
+          // Check if directory exists
+          let dir = currentTree.find(node => 
+            node.type === 'folder' && node.name === part
+          );
+
+          if (!dir) {
+            // Create directory
+            dir = {
+              id: Date.now().toString() + Math.random().toString(),
+              name: part,
+              type: 'folder',
+              path: `/workspace/${currentPath}`,
+              children: [],
+              isExpanded: true,
+            };
+            currentTree.push(dir);
+          }
+
+          currentTree = dir.children || [];
+        }
+
+        // Create file
+        const newFile: FileNode = {
+          id: Date.now().toString() + Math.random().toString(),
+          name: fileName,
+          type: 'file',
+          path: `/workspace/${path}`,
+          content: content as string,
+        };
+
+        if (dirPath) {
+          // Add to directory
+          const dir = findFolderByPath(`/workspace/${dirPath}`, newFileTree);
+          if (dir && dir.children) {
+            dir.children.push(newFile);
+          }
+        } else {
+          // Add to root
+          newFileTree.push(newFile);
+        }
+      });
+
+      setFileTree(newFileTree);
+
+      // Open the first file if available
+      const firstFile = findFirstFile(newFileTree);
+      if (firstFile) {
+        openFile(firstFile);
+      }
+
+      toast({
+        title: "Project Generated",
+        description: `${data.name} has been successfully generated.`,
+      });
+
+      // Close the modal
+      setShowGenerateProjectModal(false);
+      setProjectPrompt('');
+      setProjectFramework('');
+      setProjectName('');
+    } catch (error) {
+      console.error('Error generating project:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to generate project',
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingProject(false);
+    }
+  };
+
+  // Helper function to find the first file in the tree
+  const findFirstFile = (nodes: FileNode[]): FileNode | null => {
+    for (const node of nodes) {
+      if (node.type === 'file') {
+        return node;
+      }
+      if (node.children && node.children.length > 0) {
+        const found = findFirstFile(node.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // Helper function to find a folder by path
+  const findFolderByPath = (path: string, nodes: FileNode[]): FileNode | null => {
+    for (const node of nodes) {
+      if (node.type === 'folder' && node.path === path) {
+        return node;
+      }
+      if (node.children) {
+        const found = findFolderByPath(path, node.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const getLanguageFromFileName = (fileName: string) => {
     if (fileName.endsWith('.js')) return 'javascript';
     if (fileName.endsWith('.ts')) return 'typescript';
@@ -605,76 +770,78 @@ export default function IDE() {
   };
 
   const executeProject = useCallback(async () => {
-    if (!selectedFile) {
-      toast({
-        title: "No file selected",
-        description: "Please select a file to run.",
-      });
-      return;
+  if (!selectedFile || !selectedFile.content) {
+    toast({
+      title: "No file selected",
+      description: "Please select a file to run.",
+    });
+    return;
+  }
+
+  setIsLoading(true);
+  setTerminalOutput([]); // Clear previous terminal output
+
+  try {
+    const response = await fetch('/api/ide/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+      },
+      body: JSON.stringify({
+        filePath: selectedFile.path,
+        content: selectedFile.content || '',
+        language: getLanguageFromFileName(selectedFile.name)
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to run project');
     }
 
-    setIsLoading(true);
-    setTerminalOutput([]); // Clear previous terminal output
+    const data = await response.json();
 
-    try {
-      const response = await fetch('/api/ide/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          filePath: selectedFile.path,
-          content: selectedFile.content || '',
-          language: getLanguageFromFileName(selectedFile.name)
-        }),
-      });
+    const terminalOutputLines = data.output.map((line: string, index: number) => ({
+      id: index.toString(),
+      type: 'output' as const,
+      content: line,
+      timestamp: new Date()
+    }));
 
-      if (!response.ok) {
-        throw new Error('Failed to run project');
-      }
+    setTerminalOutput(terminalOutputLines);
 
-      const data = await response.json();
-      
-      // Convert the output array to terminal output format
-      const terminalOutputLines = data.output.map((line: string, index: number) => ({
-        id: index.toString(),
-        type: 'output' as const,
-        content: line,
-        timestamp: new Date()
-      }));
+    toast({
+      title: data.exitCode === 0
+        ? "Project executed successfully"
+        : "Project executed with errors",
+      description: data.exitCode === 0
+        ? `${selectedFile.name} ran without errors.`
+        : "Check the terminal for error details.",
+      variant: data.exitCode === 0 ? undefined : "destructive",
+    });
 
-      setTerminalOutput(terminalOutputLines);
-      
-      if (data.exitCode === 0) {
-        toast({
-          title: "Project executed successfully",
-          description: `${selectedFile.name} ran without errors.`,
-        });
-      } else {
-        toast({
-          title: "Project executed with errors",
-          description: `Check the terminal for error details.`,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      setTerminalOutput(prev => [...prev, {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    setTerminalOutput(prev => [
+      ...prev,
+      {
         id: Date.now().toString(),
         type: 'error' as const,
         content: `Error: ${errorMessage}`,
         timestamp: new Date()
-      }]);
-      toast({
-        title: "Error executing project",
-        description: `Failed to execute project. Error: ${errorMessage}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedFile, toast]);
+      }
+    ]);
+
+    toast({
+      title: "Error executing project",
+      description: `Failed to execute project. Error: ${errorMessage}`,
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
+  }
+}, [selectedFile, toast, setIsLoading, setTerminalOutput]);
+
 
   if (!isAuthenticated) {
     return (
@@ -706,6 +873,15 @@ export default function IDE() {
             >
               <Play className="w-4 h-4 mr-2" />
               Run Project
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => setShowGenerateProjectModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 border-purple-600"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Generate Project
             </Button>
             <Button 
               size="sm" 
@@ -1247,6 +1423,94 @@ export default function IDE() {
             <Trash2 className="w-4 h-4" />
             <span>Delete</span>
           </button>
+        </div>
+      )}
+
+      {/* Generate Project Modal */}
+      {showGenerateProjectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-[500px] max-w-[90vw]">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-purple-500" />
+                Generate Project
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Project Idea or Description</label>
+                  <textarea
+                    value={projectPrompt}
+                    onChange={(e) => setProjectPrompt(e.target.value)}
+                    placeholder="Describe your project idea in detail..."
+                    className="w-full h-32 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                    disabled={isGeneratingProject}
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Framework (Optional)</label>
+                  <select
+                    value={projectFramework}
+                    onChange={(e) => setProjectFramework(e.target.value)}
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                    disabled={isGeneratingProject}
+                  >
+                    <option value="">Select a framework (optional)</option>
+                    <option value="react">React</option>
+                    <option value="vue">Vue</option>
+                    <option value="angular">Angular</option>
+                    <option value="node">Node.js</option>
+                    <option value="express">Express</option>
+                    <option value="next">Next.js</option>
+                    <option value="django">Django</option>
+                    <option value="flask">Flask</option>
+                    <option value="rails">Ruby on Rails</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Project Name (Optional)</label>
+                  <Input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Enter project name"
+                    className="bg-gray-700 border-gray-600 text-white"
+                    disabled={isGeneratingProject}
+                  />
+                </div>
+                
+                <div className="flex space-x-2 pt-2">
+                  <Button 
+                    onClick={handleGenerateProject} 
+                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                    disabled={isGeneratingProject || !projectPrompt.trim()}
+                  >
+                    {isGeneratingProject ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Generate
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowGenerateProjectModal(false)}
+                    className="flex-1"
+                    disabled={isGeneratingProject}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
