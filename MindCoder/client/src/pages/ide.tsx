@@ -45,6 +45,12 @@ import {
 import Editor from '@monaco-editor/react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+// @ts-ignore
+import { CopyToClipboard } from 'react-copy-to-clipboard';
+import { cn } from '@/lib/utils';
 
 interface FileNode {
   id: string;
@@ -61,6 +67,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  isCode?: boolean;
+  language?: string;
 }
 
 interface TerminalOutput {
@@ -224,7 +232,7 @@ export default function IDE() {
       name,
       type,
       path: `${parentPath}/${name}`,
-      content: type === 'file' ? getBoilerplateContent(name, type) : '',
+      content: type === 'file' ? '' : '',
       isExpanded: type === 'folder' ? false : undefined,
     };
 
@@ -410,13 +418,14 @@ export default function IDE() {
       const currentFileContent = selectedFile?.content || '';
       const currentFileName = selectedFile?.name || '';
       const tokenToSend = localStorage.getItem('devmindx_token');
-          console.log('Attempting to send AI chat request with token:', tokenToSend);
-          const response = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
-            },
+      console.log('Attempting to send AI chat request with token:', tokenToSend);
+      
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
         body: JSON.stringify({
           message,
           model: 'together',
@@ -435,14 +444,56 @@ export default function IDE() {
 
       const data = await response.json();
       
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.content || 'I apologize, but I couldn\'t process your request.',
-        timestamp: new Date(),
+      // Process the response to detect code blocks
+      const processContent = (content: string) => {
+        const codeBlockRegex = /```(\w*)\n([\s\S]*?)\n```/g;
+        const parts = [];
+        let lastIndex = 0;
+        let match;
+        
+        while ((match = codeBlockRegex.exec(content)) !== null) {
+          // Add text before code block
+          if (match.index > lastIndex) {
+            parts.push({
+              type: 'text',
+              content: content.substring(lastIndex, match.index)
+            });
+          }
+          
+          // Add code block
+          parts.push({
+            type: 'code',
+            language: match[1] || 'plaintext',
+            content: match[2]
+          });
+          
+          lastIndex = match.index + match[0].length;
+        }
+        
+        // Add remaining text after last code block
+        if (lastIndex < content.length) {
+          parts.push({
+            type: 'text',
+            content: content.substring(lastIndex)
+          });
+        }
+        
+        return parts;
       };
 
-      setChatMessages(prev => [...prev, assistantMessage]);
+      const processedParts = processContent(data.content || 'I apologize, but I couldn\'t process your request.');
+      
+      // Create separate messages for each part
+      const assistantMessages = processedParts.map((part, index) => ({
+        id: `${Date.now() + index}`,
+        role: 'assistant' as const,
+        content: part.type === 'code' ? part.content : part.content,
+        timestamp: new Date(),
+        isCode: part.type === 'code',
+        language: part.type === 'code' ? part.language : undefined
+      }));
+
+      setChatMessages(prev => [...prev, ...assistantMessages]);
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -456,98 +507,6 @@ export default function IDE() {
       setIsLoading(false);
     }
   }, [selectedFile, chatMessages, fileTree]);
-
-  const generateProjectWithAI = useCallback(async (prompt: string) => {
-    setIsLoading(true);
-    
-    try {
-      const response = await fetch('/api/projects/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          name: 'AI Generated Project',
-          framework: 'react',
-          description: prompt,
-          model: 'gemini'
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate project');
-      }
-
-      const data = await response.json();
-      
-      // Convert the generated project structure to our FileNode format
-      if (data.files) {
-        const newFileTree: FileNode[] = [];
-        
-        Object.entries(data.files).forEach(([path, content]) => {
-          const pathParts = path.split('/');
-          const fileName = pathParts.pop() || '';
-          const folderPath = pathParts.join('/');
-          
-          // Create folder structure
-          let currentLevel = newFileTree;
-          pathParts.forEach(part => {
-            let folder = currentLevel.find(node => node.name === part && node.type === 'folder');
-            if (!folder) {
-              folder = {
-                id: Date.now().toString() + Math.random(),
-                name: part,
-                type: 'folder',
-                path: `/workspace/${pathParts.slice(0, pathParts.indexOf(part) + 1).join('/')}`,
-                children: [],
-                isExpanded: true
-              };
-              currentLevel.push(folder);
-            }
-            currentLevel = folder.children || [];
-          });
-          
-          // Add file
-          const file: FileNode = {
-            id: Date.now().toString() + Math.random(),
-            name: fileName,
-            type: 'file',
-            path: `/workspace/${path}`,
-            content: content as string
-          };
-          
-          currentLevel.push(file);
-        });
-        
-        // Update the file tree state
-        setFileTree(newFileTree);
-        
-        // Open the first file if available
-        if (newFileTree.length > 0) {
-          const firstFile = newFileTree.find(node => node.type === 'file') || newFileTree[0];
-          if (firstFile.type === 'file') {
-            setSelectedFile(firstFile);
-            setOpenFiles([firstFile]);
-            setActiveTab(firstFile.id);
-          }
-        }
-        
-        toast({
-          title: "Project generated successfully!",
-          description: "Your AI-generated project has been created and loaded into the IDE.",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error generating project",
-        description: "Failed to generate the project. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
 
   const toggleFolder = useCallback((folderId: string) => {
     const updateExpanded = (nodes: FileNode[]): FileNode[] => {
@@ -565,8 +524,6 @@ export default function IDE() {
   }, [fileTree]);
 
   const renderFileTree = (nodes: FileNode[], level = 0) => {
-    console.log('Rendering file tree:', nodes, 'at level:', level);
-    
     return nodes.map(node => (
       <div key={node.id} style={{ paddingLeft: level * 20 }}>
         <div
@@ -576,7 +533,6 @@ export default function IDE() {
           }`}
           onClick={() => {
             if (node.type === 'folder') {
-              // Select folder for file creation
               setSelectedFolder(node.path);
               toggleFolder(node.id);
             } else {
@@ -646,446 +602,6 @@ export default function IDE() {
     if (fileName.endsWith('.jsx')) return 'javascript';
     if (fileName.endsWith('.tsx')) return 'typescript';
     return 'plaintext';
-  };
-
-  const getBoilerplateContent = (fileName: string, fileType: 'file' | 'folder') => {
-    if (fileType === 'folder') return '';
-    
-    const language = getLanguageFromFileName(fileName);
-    
-    switch (language) {
-      case 'html':
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${fileName.replace('.html', '')}</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <header>
-        <h1>Welcome to ${fileName.replace('.html', '')}</h1>
-        <nav>
-            <ul>
-                <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#contact">Contact</a></li>
-            </ul>
-        </nav>
-    </header>
-
-    <main>
-        <section id="home">
-            <h2>Home</h2>
-            <p>This is your main content area. Start building your website here!</p>
-        </section>
-
-        <section id="about">
-            <h2>About</h2>
-            <p>Tell your story here.</p>
-        </section>
-
-        <section id="contact">
-            <h2>Contact</h2>
-            <p>Add your contact information here.</p>
-        </section>
-    </main>
-
-    <footer>
-        <p>&copy; 2024 ${fileName.replace('.html', '')}. All rights reserved.</p>
-    </footer>
-
-    <script src="script.js"></script>
-</body>
-</html>`;
-
-      case 'css':
-        return `/* ${fileName} - Main Stylesheet */
-
-/* Reset and base styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Arial', sans-serif;
-    line-height: 1.6;
-    color: #333;
-    background-color: #f4f4f4;
-}
-
-/* Header styles */
-header {
-    background-color: #333;
-    color: white;
-    padding: 1rem 0;
-    text-align: center;
-}
-
-header h1 {
-    margin-bottom: 1rem;
-}
-
-nav ul {
-    list-style: none;
-    display: flex;
-    justify-content: center;
-    gap: 2rem;
-}
-
-nav a {
-    color: white;
-    text-decoration: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    transition: background-color 0.3s;
-}
-
-nav a:hover {
-    background-color: #555;
-}
-
-/* Main content */
-main {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-}
-
-section {
-    margin-bottom: 3rem;
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-h2 {
-    color: #333;
-    margin-bottom: 1rem;
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 0.5rem;
-}
-
-/* Footer */
-footer {
-    background-color: #333;
-    color: white;
-    text-align: center;
-    padding: 1rem 0;
-    margin-top: 2rem;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    nav ul {
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    main {
-        padding: 1rem;
-    }
-}`;
-
-      case 'javascript':
-        return `// ${fileName} - JavaScript File
-
-// DOM Content Loaded Event
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('${fileName} loaded successfully!');
-    
-    // Initialize your application here
-    initializeApp();
-});
-
-// Main application initialization
-function initializeApp() {
-    console.log('Application initialized');
-    
-    // Add your business logic here
-    setupEventListeners();
-    loadData();
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Example: Add click listeners to navigation links
-    const navLinks = document.querySelectorAll('nav a');
-    navLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const targetId = this.getAttribute('href').substring(1);
-            scrollToSection(targetId);
-        });
-    });
-}
-
-// Smooth scroll to section
-function scrollToSection(sectionId) {
-    const section = document.getElementById(sectionId);
-    if (section) {
-        section.scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-// Load data function
-function loadData() {
-    // Example: Fetch data from API
-    console.log('Loading data...');
-    
-    // Simulate API call
-    setTimeout(() => {
-        console.log('Data loaded successfully');
-    }, 1000);
-}
-
-// Utility functions
-function showMessage(message, type = 'info') {
-    console.log(\`[\${type.toUpperCase()}] \${message}\`);
-}
-
-// Export functions if using modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        initializeApp,
-        setupEventListeners,
-        loadData,
-        showMessage
-    };
-}`;
-
-      case 'typescript':
-        return `// ${fileName} - TypeScript File
-
-interface AppConfig {
-    name: string;
-    version: string;
-    debug: boolean;
-}
-
-interface User {
-    id: number;
-    name: string;
-    email: string;
-}
-
-// Application configuration
-const config: AppConfig = {
-    name: '${fileName.replace('.ts', '')}',
-    version: '1.0.0',
-    debug: true
-};
-
-// Main application class
-class App {
-    private users: User[] = [];
-    private config: AppConfig;
-
-    constructor(config: AppConfig) {
-        this.config = config;
-        this.initialize();
-    }
-
-    private initialize(): void {
-        console.log(\`\${this.config.name} v\${this.config.version} initialized\`);
-        this.setupEventListeners();
-        this.loadData();
-    }
-
-    private setupEventListeners(): void {
-        // Add your event listeners here
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM loaded');
-        });
-    }
-
-    private async loadData(): Promise<void> {
-        try {
-            // Simulate API call
-            const response = await this.fetchUsers();
-            this.users = response;
-            console.log(\`Loaded \${this.users.length} users\`);
-        } catch (error) {
-            console.error('Failed to load data:', error);
-        }
-    }
-
-    private async fetchUsers(): Promise<User[]> {
-        // Simulate API call
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve([
-                    { id: 1, name: 'John Doe', email: 'john@example.com' },
-                    { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
-                ]);
-            }, 1000);
-        });
-    }
-
-    public getUsers(): User[] {
-        return this.users;
-    }
-
-    public addUser(user: User): void {
-        this.users.push(user);
-        console.log(\`User \${user.name} added\`);
-    }
-}
-
-// Initialize application
-const app = new App(config);
-
-// Export for module usage
-export default App;
-export { User, AppConfig };`;
-
-      case 'python':
-        return `#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-${fileName} - Python Script
-Description: Add your script description here
-Author: Your Name
-Date: $(date +%Y-%m-%d)
-"""
-
-import sys
-import os
-from typing import List, Dict, Any
-from datetime import datetime
-
-class App:
-    """Main application class"""
-    
-    def __init__(self):
-        self.name = "${fileName.replace('.py', '')}"
-        self.version = "1.0.0"
-        self.debug = True
-    
-    def initialize(self) -> None:
-        """Initialize the application"""
-        print(f"Initializing {self.name} v{self.version}")
-        self.setup()
-        self.run()
-    
-    def setup(self) -> None:
-        """Setup application components"""
-        print("Setting up application...")
-        # Add your setup logic here
-    
-    def run(self) -> None:
-        """Main application logic"""
-        print("Running application...")
-        # Add your main business logic here
-        self.process_data()
-    
-    def process_data(self) -> None:
-        """Process application data"""
-        print("Processing data...")
-        # Add your data processing logic here
-    
-    def cleanup(self) -> None:
-        """Cleanup resources"""
-        print("Cleaning up...")
-        # Add cleanup logic here
-
-def main():
-    """Main function"""
-    try:
-        app = App()
-        app.initialize()
-    except KeyboardInterrupt:
-        print("\\nApplication interrupted by user")
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    finally:
-        if 'app' in locals():
-            app.cleanup()
-
-if __name__ == "__main__":
-    main()`;
-
-      case 'json':
-        return `{
-  "name": "${fileName.replace('.json', '')}",
-  "version": "1.0.0",
-  "description": "Add your project description here",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "jest",
-    "build": "webpack --mode production"
-  },
-  "keywords": [],
-  "author": "Your Name",
-  "license": "MIT",
-  "dependencies": {
-    "express": "^4.18.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1",
-    "jest": "^29.7.0"
-  }
-}`;
-
-      case 'markdown':
-        return `# ${fileName.replace('.md', '')}
-
-## Description
-Add your project description here.
-
-## Features
-- Feature 1
-- Feature 2
-- Feature 3
-
-## Installation
-\`\`\`bash
-npm install
-\`\`\`
-
-## Usage
-\`\`\`javascript
-const app = require('./index.js');
-app.start();
-\`\`\`
-
-## API Reference
-### \`functionName(param)\`
-Description of the function.
-
-**Parameters:**
-- \`param\` (string): Description of parameter
-
-**Returns:**
-- (string): Description of return value
-
-## Contributing
-1. Fork the repository
-2. Create your feature branch (\`git checkout -b feature/amazing-feature\`)
-3. Commit your changes (\`git commit -m 'Add some amazing feature'\`)
-4. Push to the branch (\`git push origin feature/amazing-feature\`)
-5. Open a Pull Request
-
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contact
-- Your Name - your.email@example.com
-- Project Link: [https://github.com/yourusername/project](https://github.com/yourusername/project)`;
-
-      default:
-        return `// ${fileName} - ${language} file
-// Add your code here
-
-console.log('Hello from ${fileName}!');`;
-    }
   };
 
   const executeProject = useCallback(async () => {
@@ -1158,44 +674,7 @@ console.log('Hello from ${fileName}!');`;
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile, getLanguageFromFileName, toast]);
-
-  // When running a file
-  const handleRunFile = async () => {
-    if (!selectedFile) return;
-    setTerminalOutput([{ 
-      id: Date.now().toString(),
-      type: 'output' as const, 
-      content: 'Running...',
-      timestamp: new Date()
-    }]);
-    try {
-      const response = await fetch('/api/ide/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          filePath: selectedFile.path,
-          content: selectedFile.content,
-          language: getLanguageFromFileName(selectedFile.name),
-        }),
-      });
-      const data = await response.json();
-      if (data.url) {
-        window.open(data.url, '_blank'); // Open HTML preview in new tab
-      }
-      setTerminalOutput(data.output.map((line: string) => ({ type: 'output' as const, value: line })));
-    } catch (error) {
-      setTerminalOutput([{ 
-        id: Date.now().toString(),
-        type: 'output' as const, 
-        content: 'Error: Failed to run project',
-        timestamp: new Date()
-      }]);
-    }
-  };
+  }, [selectedFile, toast]);
 
   if (!isAuthenticated) {
     return (
@@ -1232,6 +711,7 @@ console.log('Hello from ${fileName}!');`;
               size="sm" 
               variant="outline" 
               onClick={() => setShowAIChat(!showAIChat)}
+              className={showAIChat ? "bg-blue-600 hover:bg-blue-700" : ""}
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               AI Chat
@@ -1363,7 +843,7 @@ console.log('Hello from ${fileName}!');`;
           )}
 
           {/* Editor and Chat Container */}
-          <div className="flex-1 flex">
+          <div className="flex-1 flex h-full">
             {/* Code Editor */}
             <div className="flex-1">
               {selectedFile ? (
@@ -1402,29 +882,123 @@ console.log('Hello from ${fileName}!');`;
 
             {/* AI Chat */}
             {showAIChat && (
-              <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
-                <div className="p-4 border-b border-gray-700">
-                  <h3 className="font-semibold">AI Assistant</h3>
-                </div>
-                <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {chatMessages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-xs px-3 py-2 rounded-lg ${
-                          message.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-700 text-gray-200'
-                        }`}
+              <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col h-full">
+                <div className="p-4 border-b border-gray-700 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">AI Assistant</h3>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setChatMessages([])}
+                        className="text-xs"
                       >
-                        {message.content}
-                      </div>
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Clear
+                      </Button>
                     </div>
-                  ))}
+                  </div>
                 </div>
-                <div className="p-4 border-t border-gray-700">
+                <div className="flex-1 overflow-hidden">
+  <div 
+    ref={chatRef}
+    className="h-full max-h-[calc(100vh-300px)] overflow-y-auto p-4 space-y-4"
+  >
+                    {chatMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={cn(
+                          "flex",
+                          message.role === 'user' ? 'justify-end' : 'justify-start'
+                        )}
+                      >
+                        {message.isCode ? (
+                          <div className="w-full">
+                            <div className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600">
+                              <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+                                <span className="text-xs text-gray-400">{message.language || 'code'}</span>
+                                <CopyToClipboard text={message.content}>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </Button>
+                                </CopyToClipboard>
+                              </div>
+                              <pre className="p-3 overflow-x-auto">
+                                <code className={`language-${message.language || 'plaintext'}`}>
+                                  {message.content}
+                                </code>
+                              </pre>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className={cn(
+                              "max-w-xs px-3 py-2 rounded-lg",
+                              message.role === 'user' 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-gray-700 text-gray-200'
+                            )}
+                          >
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeHighlight]}
+                              components={{
+                                code({node, inline = false, className, children, ...props}: {
+                                  node?: any;
+                                  inline?: boolean;
+                                  className?: string;
+                                  children?: React.ReactNode;
+                                }) {
+                                  const match = /language-(\w+)/.exec(className || '');
+                                  return !inline ? (
+                                    <div className="relative">
+                                      <CopyToClipboard text={String(children).replace(/\n$/, '')}>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </Button>
+                                      </CopyToClipboard>
+                                      <pre className={className}>
+                                        <code {...props}>
+                                          {children}
+                                        </code>
+                                      </pre>
+                                    </div>
+                                  ) : (
+                                    <code className={className} {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {isLoading && (
+                      <div className="flex justify-start">
+                        <div className="px-3 py-2 rounded-lg bg-gray-700 text-gray-200">
+                          <div className="flex space-x-2">
+                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"></div>
+                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4 border-t border-gray-700 flex-shrink-0">
                   <div className="flex space-x-2">
                     <Input
                       value={chatInput}
@@ -1435,8 +1009,13 @@ console.log('Hello from ${fileName}!');`;
                           sendChatMessage(chatInput);
                         }
                       }}
+                      className="flex-1"
                     />
-                    <Button onClick={() => sendChatMessage(chatInput)} size="sm">
+                    <Button 
+                      onClick={() => sendChatMessage(chatInput)} 
+                      size="sm"
+                      disabled={isLoading}
+                    >
                       <Send className="w-4 h-4" />
                     </Button>
                   </div>
