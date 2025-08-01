@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from 'next-themes';
 
 import { 
   Folder, 
@@ -32,6 +33,7 @@ import {
   Brain,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   MoreHorizontal,
   Copy,
   RotateCcw,
@@ -42,7 +44,15 @@ import {
   FilePlus,
   LogOut,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Sparkles,
+  Cpu,
+  GitBranch,
+  Type,
+  FileCode,
+  FileJson,
+  FileImage,
+  FileArchive
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { useAuth } from '@/hooks/use-auth';
@@ -52,8 +62,10 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 // @ts-ignore
 import { CopyToClipboard } from 'react-copy-to-clipboard';
-import { cn } from '@/lib/utils';
+import { cn, getLanguageFromFileName } from '@/lib/utils';
+import { ideApi } from '@/lib/api';
 
+// Types
 interface FileNode {
   id: string;
   name: string;
@@ -62,6 +74,7 @@ interface FileNode {
   children?: FileNode[];
   path: string;
   isExpanded?: boolean;
+  parentId?: string | null;
 }
 
 interface ChatMessage {
@@ -80,9 +93,128 @@ interface TerminalOutput {
   timestamp: Date;
 }
 
+interface Boilerplate {
+  [key: string]: string;
+}
+
+// Enhanced boilerplate templates with proper syntax
+const BOILERPLATES: Boilerplate = {
+  'javascript': `// JavaScript Boilerplate
+function main() {
+  console.log('Hello, World!');
+  // Your code here
+}
+
+main();`,
+  'typescript': `// TypeScript Boilerplate
+interface User {
+  name: string;
+  age: number;
+}
+
+const user: User = { name: 'John', age: 30 };
+console.log(user);
+
+function main(): void {
+  // Your code here
+}
+
+main();`,
+  'react': `// React Boilerplate
+import React from 'react';
+
+function App() {
+  return (
+    <div className="App">
+      <h1>Hello, React!</h1>
+    </div>
+  );
+}
+
+export default App;`,
+  'node': `// Node.js Boilerplate
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Hello, Node.js!');
+});
+
+app.listen(PORT, () => {
+  console.log(\`Server running on port \${PORT}\`);
+});`,
+  'java': `// Java Boilerplate
+public class Main {
+  public static void main(String[] args) {
+    System.out.println("Hello, World!");
+  }
+}`,
+  'python': `# Python Boilerplate
+def main():
+    print("Hello, World!")
+
+if __name__ == "__main__":
+    main()`,
+  'html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Hello, HTML!</h1>
+  <script src="script.js"></script>
+</body>
+</html>`,
+  'css': `/* CSS Boilerplate */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  color: #333;
+}`,
+  'mongodb': `// MongoDB Boilerplate
+const { MongoClient } = require('mongodb');
+const uri = "mongodb://localhost:27017";
+
+async function main() {
+  const client = new MongoClient(uri);
+  
+  try {
+    await client.connect();
+    console.log("Connected to MongoDB");
+  } finally {
+    await client.close();
+  }
+}
+
+main().catch(console.error);`,
+  'cpp': `// C++ Boilerplate
+#include <iostream>
+
+int main() {
+  std::cout << "Hello, World!" << std::endl;
+  return 0;
+}`,
+  'go': `// Go Boilerplate
+package main
+
+import "fmt"
+
+func main() {
+  fmt.Println("Hello, World!")
+}`
+};
+
 export default function IDE() {
   const { isAuthenticated, logout } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const [fileTree, setFileTree] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [openFiles, setOpenFiles] = useState<FileNode[]>([]);
@@ -92,15 +224,13 @@ export default function IDE() {
   const [terminalOutput, setTerminalOutput] = useState<TerminalOutput[]>([]);
   const [terminalInput, setTerminalInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentDirectory, setCurrentDirectory] = useState('/workspace');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [currentPath, setCurrentPath] = useState('/workspace');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDialogType, setCreateDialogType] = useState<'file' | 'folder'>('file');
   const [createDialogName, setCreateDialogName] = useState('');
   const [createDialogPath, setCreateDialogPath] = useState('/workspace');
-  const [selectedFolder, setSelectedFolder] = useState<string>('/workspace');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode | null } | null>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const chatRef = useRef<HTMLDivElement>(null);
   const [showAIChat, setShowAIChat] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
   const [showGenerateProjectModal, setShowGenerateProjectModal] = useState(false);
@@ -108,6 +238,20 @@ export default function IDE() {
   const [projectFramework, setProjectFramework] = useState('');
   const [projectName, setProjectName] = useState('');
   const [isGeneratingProject, setIsGeneratingProject] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(200);
+  const [isDraggingTerminal, setIsDraggingTerminal] = useState(false);
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const terminalResizeRef = useRef<HTMLDivElement>(null);
+  const terminalInputRef = useRef<HTMLInputElement>(null);
+
+  // Set futuristic theme by default
+  useEffect(() => {
+    setTheme('dark');
+  }, [setTheme]);
 
   // Initialize with empty workspace
   useEffect(() => {
@@ -130,22 +274,29 @@ export default function IDE() {
     }
   }, [chatMessages]);
 
-  // Monitor file tree changes
+  // Terminal resize handler
   useEffect(() => {
-    console.log('File tree updated:', fileTree);
-  }, [fileTree]);
-
-  // Close context menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingTerminal) {
+        const newHeight = window.innerHeight - e.clientY;
+        setTerminalHeight(Math.max(100, Math.min(newHeight, 500)));
+      }
     };
 
-    document.addEventListener('click', handleClickOutside);
+    const handleMouseUp = () => {
+      setIsDraggingTerminal(false);
+    };
+
+    if (isDraggingTerminal) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
     return () => {
-      document.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [isDraggingTerminal]);
 
   const findFileById = useCallback((id: string, nodes: FileNode[]): FileNode | null => {
     for (const node of nodes) {
@@ -199,9 +350,8 @@ export default function IDE() {
       const updatedFile = findFileById(fileId, fileTree);
       if (updatedFile) {
         updatedFile.content = content;
-        setFileTree([...fileTree]); // Trigger re-render
+        setFileTree([...fileTree]);
         
-        // Save to backend
         try {
           await fetch('/api/ide/files', {
             method: 'POST',
@@ -234,23 +384,52 @@ export default function IDE() {
   }, [fileTree, findFileById, toast]);
 
   const createFileOrFolder = useCallback((parentPath: string, name: string, type: 'file' | 'folder') => {
+    if (!name.trim()) {
+      toast({
+        title: "Error",
+        description: "Name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file extension for known languages
+    if (type === 'file') {
+      const extension = name.split('.').pop()?.toLowerCase();
+      const validExtensions = ['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'cpp', 'go', 'json', 'md'];
+      
+      if (!extension || !validExtensions.includes(extension)) {
+        toast({
+          title: "Invalid File Type",
+          description: "Please use a valid file extension (.js, .ts, .jsx, .tsx, .html, .css, .py, .java, .cpp, .go, .json, .md)",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const newFile: FileNode = {
       id: Date.now().toString(),
       name,
       type,
-      path: `${parentPath}/${name}`,
-      content: type === 'file' ? '' : '',
+      path: `${parentPath === '/' ? '' : parentPath}/${name}`,
+      content: type === 'file' ? getBoilerplateContent(name) : '',
       isExpanded: type === 'folder' ? false : undefined,
+      parentId: parentPath === '/workspace' ? null : findFileByPath(parentPath, fileTree)?.id || null
     };
 
-    // Update file tree with new file/folder
     setFileTree(prevTree => {
+      if (parentPath === '/workspace') {
+        return [...prevTree, newFile];
+      }
+
       const updateTree = (nodes: FileNode[]): FileNode[] => {
         return nodes.map(node => {
           if (node.path === parentPath) {
             return {
               ...node,
-              children: [...(node.children || []), newFile]
+              children: [...(node.children || []), newFile],
+              isExpanded: true
             };
           }
           if (node.children) {
@@ -263,15 +442,9 @@ export default function IDE() {
         });
       };
 
-      // If parentPath is root (/workspace), add to root level
-      if (parentPath === '/workspace') {
-        return [...prevTree, newFile];
-      }
-
       return updateTree(prevTree);
     });
     
-    // Save to backend
     fetch('/api/ide/files', {
       method: 'POST',
       headers: {
@@ -287,7 +460,6 @@ export default function IDE() {
       console.error('Failed to save file:', error);
     });
 
-    // Open the file if it's a file
     if (type === 'file') {
       openFile(newFile);
     }
@@ -296,7 +468,23 @@ export default function IDE() {
       title: `${type === 'file' ? 'File' : 'Folder'} created`,
       description: `${name} has been created successfully.`,
     });
-  }, [openFile, toast]);
+  }, [fileTree, findFileByPath, openFile, toast]);
+
+  const getBoilerplateContent = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const language = getLanguageFromFileName(fileName);
+    
+    if (extension === 'jsx' || extension === 'tsx') {
+      return BOILERPLATES['react'];
+    } else if (extension === 'cpp') {
+      return BOILERPLATES['cpp'];
+    } else if (extension === 'go') {
+      return BOILERPLATES['go'];
+    } else if (BOILERPLATES[language]) {
+      return BOILERPLATES[language];
+    }
+    return '';
+  };
 
   const deleteFile = useCallback((fileId: string) => {
     setFileTree(prevTree => {
@@ -314,7 +502,6 @@ export default function IDE() {
       return removeFile(prevTree);
     });
 
-    // Remove from open files and tabs
     setOpenFiles(prev => prev.filter(file => file.id !== fileId));
     setActiveTab(prev => {
       if (prev === fileId) {
@@ -341,7 +528,7 @@ export default function IDE() {
             id: Date.now().toString(),
             name: file.name,
             type: 'file',
-            path: `${selectedFolder}/${file.name}`,
+            path: `${currentPath === '/workspace' ? '' : currentPath}/${file.name}`,
             content,
           };
           
@@ -351,7 +538,7 @@ export default function IDE() {
         reader.readAsText(file);
       });
     }
-  }, [selectedFolder, openFile]);
+  }, [currentPath, openFile]);
 
   const executeTerminalCommand = useCallback(async (command: string) => {
     const output: TerminalOutput = {
@@ -362,49 +549,118 @@ export default function IDE() {
     };
     
     setTerminalOutput(prev => [...prev, output]);
+    setTerminalHistory(prev => [...prev, command]);
+    setHistoryIndex(-1);
     
-    // Simulate command execution
     setIsLoading(true);
     
-    setTimeout(() => {
+    try {
       let response = '';
       
       if (command.startsWith('ls') || command.startsWith('dir')) {
-        response = fileTree.map(node => 
+        response = getCurrentFolderContents().map(node => 
           `${node.type === 'folder' ? '📁' : '📄'} ${node.name}`
         ).join('\n');
       } else if (command.startsWith('cat ') || command.startsWith('type ')) {
         const fileName = command.split(' ')[1];
-        const file = findFileByPath(`/workspace/${fileName}`, fileTree);
+        const file = findFileByPath(`${currentPath}/${fileName}`, fileTree);
         response = file?.content || 'File not found';
-      } else if (command.startsWith('node ') || command.startsWith('python ') || command.startsWith('npm ')) {
-        response = 'Command executed successfully!';
       } else if (command === 'clear') {
         setTerminalOutput([]);
         setIsLoading(false);
         return;
+      } else if (command.startsWith('cd ')) {
+        const path = command.split(' ')[1];
+        if (path === '..') {
+          navigateUp();
+          response = `Changed directory to ${currentPath}`;
+        } else {
+          const newPath = `${currentPath}/${path}`.replace(/\/+/g, '/');
+          const folder = findFileByPath(newPath, fileTree);
+          if (folder && folder.type === 'folder') {
+            navigateToFolder(newPath);
+            response = `Changed directory to ${newPath}`;
+          } else {
+            response = `Directory not found: ${path}`;
+          }
+        }
       } else {
-        response = `Command '${command}' executed successfully.`;
+        // Send all other commands to the backend for execution
+        const result = await ideApi.executeTerminalCommand(command, currentPath);
+        if (result.error) {
+          response = `Error: ${result.error}`;
+        } else {
+          response = result.output || 'Command executed successfully';
+        }
       }
       
       const resultOutput: TerminalOutput = {
         id: (Date.now() + 1).toString(),
-        type: 'output',
+        type: response.includes('Error:') ? 'error' : 'output',
         content: response,
         timestamp: new Date(),
       };
       
       setTerminalOutput(prev => [...prev, resultOutput]);
+    } catch (error) {
+      const errorOutput: TerminalOutput = {
+        id: (Date.now() + 1).toString(),
+        type: 'error',
+        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        timestamp: new Date(),
+      };
+      setTerminalOutput(prev => [...prev, errorOutput]);
+    } finally {
       setIsLoading(false);
-    }, 500);
-  }, [fileTree, findFileByPath]);
+      setTimeout(() => {
+        if (terminalInputRef.current) {
+          terminalInputRef.current.focus();
+        }
+      }, 0);
+    }
+  }, [currentPath, fileTree, findFileByPath]);
 
-  const handleTerminalSubmit = useCallback((e: React.KeyboardEvent) => {
+  const getCurrentFolderContents = useCallback(() => {
+    if (currentPath === '/workspace') return fileTree;
+    const folder = findFileByPath(currentPath, fileTree);
+    return folder?.children || [];
+  }, [currentPath, fileTree, findFileByPath]);
+
+  const navigateToFolder = useCallback((path: string) => {
+    setCurrentPath(path);
+  }, []);
+
+  const navigateUp = useCallback(() => {
+    if (currentPath === '/workspace') return;
+    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/workspace';
+    navigateToFolder(parentPath);
+  }, [currentPath, navigateToFolder]);
+
+  const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && terminalInput.trim()) {
       executeTerminalCommand(terminalInput.trim());
       setTerminalInput('');
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (terminalHistory.length > 0 && historyIndex < terminalHistory.length - 1) {
+        const newIndex = historyIndex === -1 ? terminalHistory.length - 1 : historyIndex;
+        setTerminalInput(terminalHistory[newIndex]);
+        setHistoryIndex(newIndex - 1);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex >= 0) {
+        const newIndex = historyIndex + 1;
+        if (newIndex < terminalHistory.length) {
+          setTerminalInput(terminalHistory[newIndex]);
+          setHistoryIndex(newIndex);
+        } else {
+          setTerminalInput('');
+          setHistoryIndex(-1);
+        }
+      }
     }
-  }, [terminalInput, executeTerminalCommand]);
+  }, [terminalInput, executeTerminalCommand, terminalHistory, historyIndex]);
 
   const sendChatMessage = useCallback(async (message: string) => {
     if (!message.trim()) return;
@@ -421,11 +677,8 @@ export default function IDE() {
     setIsLoading(true);
 
     try {
-      // Get current file context
       const currentFileContent = selectedFile?.content || '';
       const currentFileName = selectedFile?.name || '';
-      const tokenToSend = localStorage.getItem('devmindx_token');
-      console.log('Attempting to send AI chat request with token:', tokenToSend);
       
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -436,7 +689,7 @@ export default function IDE() {
         body: JSON.stringify({
           message,
           model: 'together',
-          chatHistory: chatMessages.slice(-5), // Last 5 messages for context
+          chatHistory: chatMessages.slice(-5),
           projectContext: {
             currentFile: currentFileName,
             currentFileContent,
@@ -451,56 +704,15 @@ export default function IDE() {
 
       const data = await response.json();
       
-      // Process the response to detect code blocks
-      const processContent = (content: string) => {
-        const codeBlockRegex = /```(\w*)\n([\s\S]*?)\n```/g;
-        const parts = [];
-        let lastIndex = 0;
-        let match;
-        
-        while ((match = codeBlockRegex.exec(content)) !== null) {
-          // Add text before code block
-          if (match.index > lastIndex) {
-            parts.push({
-              type: 'text',
-              content: content.substring(lastIndex, match.index)
-            });
-          }
-          
-          // Add code block
-          parts.push({
-            type: 'code',
-            language: match[1] || 'plaintext',
-            content: match[2]
-          });
-          
-          lastIndex = match.index + match[0].length;
-        }
-        
-        // Add remaining text after last code block
-        if (lastIndex < content.length) {
-          parts.push({
-            type: 'text',
-            content: content.substring(lastIndex)
-          });
-        }
-        
-        return parts;
+      // Process response to properly format code blocks
+      const assistantMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: data.content || 'I apologize, but I couldn\'t process your request.',
+        timestamp: new Date(),
       };
 
-      const processedParts = processContent(data.content || 'I apologize, but I couldn\'t process your request.');
-      
-      // Create separate messages for each part
-      const assistantMessages = processedParts.map((part, index) => ({
-        id: `${Date.now() + index}`,
-        role: 'assistant' as const,
-        content: part.type === 'code' ? part.content : part.content,
-        timestamp: new Date(),
-        isCode: part.type === 'code',
-        language: part.type === 'code' ? part.language : undefined
-      }));
-
-      setChatMessages(prev => [...prev, ...assistantMessages]);
+      setChatMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -509,7 +721,6 @@ export default function IDE() {
         timestamp: new Date(),
       };
       setChatMessages(prev => [...prev, errorMessage]);
-      console.error('Client-side error in sendChatMessage:', error);
     } finally {
       setIsLoading(false);
     }
@@ -529,58 +740,6 @@ export default function IDE() {
     };
     setFileTree(updateExpanded(fileTree));
   }, [fileTree]);
-
-  const renderFileTree = (nodes: FileNode[], level = 0) => {
-    return nodes.map(node => (
-      <div key={node.id} style={{ paddingLeft: level * 20 }}>
-        <div
-          className={`flex items-center space-x-2 px-2 py-1 rounded cursor-pointer hover:bg-gray-700 ${
-            selectedFile?.id === node.id ? 'bg-blue-600' : 
-            node.type === 'folder' && selectedFolder === node.path ? 'bg-green-600' : ''
-          }`}
-          onClick={() => {
-            if (node.type === 'folder') {
-              setSelectedFolder(node.path);
-              toggleFolder(node.id);
-            } else {
-              openFile(node);
-            }
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setContextMenu({ x: e.clientX, y: e.clientY, node });
-            if (node.type === 'folder') {
-              setSelectedFolder(node.path);
-            }
-          }}
-        >
-          {node.type === 'folder' ? (
-            <>
-              {node.isExpanded ? (
-                <ChevronDown className="w-4 h-4 text-blue-400" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-blue-400" />
-              )}
-              <Folder className="w-4 h-4 text-blue-400" />
-            </>
-          ) : (
-            <File className="w-4 h-4 text-green-400" />
-          )}
-          <span className="text-sm text-gray-200">{node.name}</span>
-          {node.type === 'folder' && selectedFolder === node.path && (
-            <Badge variant="secondary" className="ml-auto text-xs bg-green-600">
-              Selected
-            </Badge>
-          )}
-        </div>
-        {node.children && node.children.length > 0 && node.isExpanded && (
-          <div className="ml-4">
-            {renderFileTree(node.children, level + 1)}
-          </div>
-        )}
-      </div>
-    ));
-  };
 
   const handleCreateFileOrFolder = () => {
     if (createDialogName.trim()) {
@@ -631,38 +790,31 @@ export default function IDE() {
 
       const data = await response.json();
       
-      // Clear existing files
       setFileTree([]);
       setOpenFiles([]);
       setSelectedFile(null);
       setActiveTab('');
 
-      // Create files from the response
       const files = data.files || {};
       const newFileTree: FileNode[] = [];
 
-      // Process files and create directory structure
       Object.entries(files).forEach(([path, content]) => {
-        // Normalize path to use forward slashes and remove any leading/trailing slashes
         const normalizedPath = path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         const parts = normalizedPath.split('/');
         const fileName = parts.pop() || '';
         const dirPath = parts.join('/');
 
-        // Create directories if needed
         let currentPath = '';
         let currentTree = newFileTree;
 
         for (const part of parts) {
           currentPath = currentPath ? `${currentPath}/${part}` : part;
           
-          // Check if directory exists
           let dir = currentTree.find(node => 
             node.type === 'folder' && node.name === part
           );
 
           if (!dir) {
-            // Create directory
             dir = {
               id: Date.now().toString() + Math.random().toString(),
               name: part,
@@ -677,7 +829,6 @@ export default function IDE() {
           currentTree = dir.children || [];
         }
 
-        // Create file
         const newFile: FileNode = {
           id: Date.now().toString() + Math.random().toString(),
           name: fileName,
@@ -687,20 +838,17 @@ export default function IDE() {
         };
 
         if (dirPath) {
-          // Add to directory
           const dir = findFolderByPath(`/workspace/${dirPath}`, newFileTree);
           if (dir && dir.children) {
             dir.children.push(newFile);
           }
         } else {
-          // Add to root
           newFileTree.push(newFile);
         }
       });
 
       setFileTree(newFileTree);
 
-      // Open the first file if available
       const firstFile = findFirstFile(newFileTree);
       if (firstFile) {
         openFile(firstFile);
@@ -711,7 +859,6 @@ export default function IDE() {
         description: `${data.name} has been successfully generated.`,
       });
 
-      // Close the modal
       setShowGenerateProjectModal(false);
       setProjectPrompt('');
       setProjectFramework('');
@@ -728,7 +875,6 @@ export default function IDE() {
     }
   };
 
-  // Helper function to find the first file in the tree
   const findFirstFile = (nodes: FileNode[]): FileNode | null => {
     for (const node of nodes) {
       if (node.type === 'file') {
@@ -742,7 +888,6 @@ export default function IDE() {
     return null;
   };
 
-  // Helper function to find a folder by path
   const findFolderByPath = (path: string, nodes: FileNode[]): FileNode | null => {
     for (const node of nodes) {
       if (node.type === 'folder' && node.path === path) {
@@ -756,129 +901,167 @@ export default function IDE() {
     return null;
   };
 
-  const getLanguageFromFileName = (fileName: string) => {
-    if (fileName.endsWith('.js')) return 'javascript';
-    if (fileName.endsWith('.ts')) return 'typescript';
-    if (fileName.endsWith('.html')) return 'html';
-    if (fileName.endsWith('.css')) return 'css';
-    if (fileName.endsWith('.json')) return 'json';
-    if (fileName.endsWith('.md')) return 'markdown';
-    if (fileName.endsWith('.py')) return 'python';
-    if (fileName.endsWith('.jsx')) return 'javascript';
-    if (fileName.endsWith('.tsx')) return 'typescript';
-    return 'plaintext';
-  };
-
-  const executeProject = useCallback(async () => {
-  if (!selectedFile || !selectedFile.content) {
-    toast({
-      title: "No file selected",
-      description: "Please select a file to run.",
-    });
-    return;
-  }
-
-  setIsLoading(true);
-  setTerminalOutput([]); // Clear previous terminal output
-
-  try {
-    const response = await fetch('/api/ide/run', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
-      },
-      body: JSON.stringify({
-        filePath: selectedFile.path,
-        content: selectedFile.content || '',
-        language: getLanguageFromFileName(selectedFile.name)
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to run project');
-    }
-
-    const data = await response.json();
-
-    const terminalOutputLines = data.output.map((line: string, index: number) => ({
-      id: index.toString(),
-      type: 'output' as const,
-      content: line,
-      timestamp: new Date()
-    }));
-
-    setTerminalOutput(terminalOutputLines);
-
-    toast({
-      title: data.exitCode === 0
-        ? "Project executed successfully"
-        : "Project executed with errors",
-      description: data.exitCode === 0
-        ? `${selectedFile.name} ran without errors.`
-        : "Check the terminal for error details.",
-      variant: data.exitCode === 0 ? undefined : "destructive",
-    });
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-    setTerminalOutput(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        type: 'error' as const,
-        content: `Error: ${errorMessage}`,
-        timestamp: new Date()
+  const executeCode = useCallback(async () => {
+    if (!selectedFile || !selectedFile.content) return;
+    
+    setIsExecuting(true);
+    
+    setTerminalOutput([{
+      id: Date.now().toString(),
+      type: 'input',
+      content: `$ Running ${selectedFile.name}...`,
+      timestamp: new Date(),
+    }]);
+    
+    try {
+      const language = getLanguageFromFileName(selectedFile.name);
+      
+      const result = await ideApi.executeCode(
+        selectedFile.path,
+        selectedFile.content,
+        language
+      );
+      
+      setTerminalOutput(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          type: result.error ? 'error' : 'output',
+          content: result.error || result.output || 'No output',
+          timestamp: new Date(),
+        }
+      ]);
+      
+      if (result.error) {
+        toast({
+          title: "Execution Error",
+          description: "There was an error executing your code.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Execution Complete",
+          description: `${selectedFile.name} executed successfully.`,
+        });
       }
-    ]);
+    } catch (error) {
+      console.error('Code execution error:', error);
+      
+      setTerminalOutput(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          type: 'error',
+          content: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          timestamp: new Date(),
+        }
+      ]);
+      
+      toast({
+        title: "Execution Failed",
+        description: "Failed to execute the code. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [selectedFile, toast]);
 
-    toast({
-      title: "Error executing project",
-      description: `Failed to execute project. Error: ${errorMessage}`,
-      variant: "destructive",
-    });
-  } finally {
-    setIsLoading(false);
-  }
-}, [selectedFile, toast, setIsLoading, setTerminalOutput]);
-
+  const getFileIcon = (fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'js':
+      case 'jsx':
+        return <FileCode className="w-4 h-4 text-yellow-400" />;
+      case 'ts':
+      case 'tsx':
+        return <Type className="w-4 h-4 text-blue-400" />;
+      case 'html':
+        return <Globe className="w-4 h-4 text-orange-400" />;
+      case 'css':
+        return <FileCode className="w-4 h-4 text-blue-400" />;
+      case 'json':
+        return <FileJson className="w-4 h-4 text-green-400" />;
+      case 'java':
+        return <FileCode className="w-4 h-4 text-red-400" />;
+      case 'py':
+        return <FileCode className="w-4 h-4 text-blue-400" />;
+      case 'cpp':
+        return <FileCode className="w-4 h-4 text-blue-400" />;
+      case 'go':
+        return <FileCode className="w-4 h-4 text-blue-400" />;
+      case 'md':
+        return <FileText className="w-4 h-4 text-gray-400" />;
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'gif':
+        return <FileImage className="w-4 h-4 text-purple-400" />;
+      case 'zip':
+      case 'rar':
+      case 'tar':
+        return <FileArchive className="w-4 h-4 text-gray-400" />;
+      default:
+        return <File className="w-4 h-4 text-gray-400" />;
+    }
+  };
 
   if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle>Authentication Required</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>Please log in to access the IDE.</p>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 to-gray-800">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Card className="w-96 bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+                Authentication Required
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-gray-400">Please log in to access the IDE.</p>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-gray-900 text-white flex flex-col">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-200">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
+      <motion.div 
+        className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
         <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-bold">DevMindX IDE</h1>
+          <div className="flex items-center space-x-2">
+            <Cpu className="w-6 h-6 text-purple-500" />
+            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+              DevMindX AI IDE
+            </h1>
+          </div>
           <div className="flex items-center space-x-2">
             <Button 
               size="sm" 
               variant="outline" 
-              onClick={() => executeProject()}
-              className="bg-green-600 hover:bg-green-700 border-green-600"
+              onClick={() => executeCode()}
+              className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 border-transparent"
+              disabled={!selectedFile || isExecuting}
             >
               <Play className="w-4 h-4 mr-2" />
-              Run Project
+              {isExecuting ? 'Running...' : 'Run File'}
             </Button>
             <Button 
               size="sm" 
               variant="outline" 
               onClick={() => setShowGenerateProjectModal(true)}
-              className="bg-purple-600 hover:bg-purple-700 border-purple-600"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 border-transparent"
             >
               <Zap className="w-4 h-4 mr-2" />
               Generate Project
@@ -887,140 +1070,191 @@ export default function IDE() {
               size="sm" 
               variant="outline" 
               onClick={() => setShowAIChat(!showAIChat)}
-              className={showAIChat ? "bg-blue-600 hover:bg-blue-700" : ""}
+              className={cn(
+                "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-transparent",
+                !showAIChat && "opacity-70"
+              )}
             >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              AI Chat
+              <Brain className="w-4 h-4 mr-2" />
+              AI Assistant
             </Button>
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button size="sm" variant="outline" onClick={handleLogout}>
+          <Button size="sm" variant="outline" onClick={handleLogout} className="border-gray-600 hover:bg-gray-700">
             <LogOut className="w-4 h-4 mr-2" />
             Logout
           </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Content */}
-      <div className="flex-1 flex">
+      <ResizablePanelGroup direction="horizontal" className="flex-grow">
         {/* File Explorer */}
-        <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
-          <div className="p-4 border-b border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-sm">EXPLORER</h3>
-              <div className="flex space-x-1">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="h-6 w-6 p-0"
-                  onClick={() => {
-                    setCreateDialogType('folder');
-                    setCreateDialogPath(selectedFolder);
-                    setShowCreateDialog(true);
-                  }}
+        <ResizablePanel defaultSize={20} minSize={15}>
+          <div className="w-full h-full bg-gray-800 border-r border-gray-700 flex flex-col">
+            <div className="p-4 border-b border-gray-700 flex-shrink-0">
+              {/* Breadcrumbs */}
+              <div className="flex items-center mb-2">
+                <button 
+                  onClick={navigateUp}
+                  className="mr-2 text-gray-400 hover:text-white transition-colors"
+                  disabled={currentPath === '/workspace'}
                 >
-                  <FolderPlus className="w-3 h-3" />
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="h-6 w-6 p-0"
-                  onClick={() => {
-                    setCreateDialogType('file');
-                    setCreateDialogPath(selectedFolder);
-                    setShowCreateDialog(true);
-                  }}
-                >
-                  <FilePlus className="w-3 h-3" />
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="h-6 w-6 p-0"
-                  onClick={() => {
-                    // Test: Create a file directly in selected folder
-                    createFileOrFolder(selectedFolder, 'test.js', 'file');
-                  }}
-                >
-                  <Plus className="w-3 h-3" />
-                </Button>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                  <Upload className="w-3 h-3" />
-                </Button>
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+                <div className="flex items-center overflow-x-auto">
+                  {currentPath.split('/').filter(Boolean).map((part, index, parts) => {
+                    const path = ['/workspace', ...parts.slice(0, index + 1)].join('/');
+                    return (
+                      <React.Fragment key={path}>
+                        <span className="mx-1 text-gray-400">/</span>
+                        <button
+                          onClick={() => navigateToFolder(path)}
+                          className="text-blue-400 hover:underline transition-colors"
+                        >
+                          {part}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-            
-            {/* Selected folder indicator */}
-            <div className="mb-2 p-2 bg-gray-700 rounded text-xs">
-              <span className="text-gray-400">Selected folder:</span>
-              <span className="text-blue-400 ml-1 font-mono">
-                {selectedFolder === '/workspace' ? 'Root' : selectedFolder.split('/').pop()}
-              </span>
-            </div>
-            
-            <Input
-              type="file"
-              multiple
-              onChange={handleFileUpload}
-              className="hidden"
-              id="file-upload"
-            />
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <Button size="sm" variant="outline" className="w-full">
-                <Upload className="w-3 h-3 mr-1" />
-                Upload Files
-              </Button>
-            </label>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-2">
-            {fileTree.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No files yet</p>
-                <p className="text-xs text-gray-600 mt-1">Create files or upload to get started</p>
-              </div>
-            ) : (
-              renderFileTree(fileTree)
-            )}
-          </div>
-        </div>
 
-        {/* Editor and Chat */}
-        <div className="flex-1 flex flex-col">
-          {/* Tabs */}
-          {openFiles.length > 0 && (
-            <div className="bg-gray-800 border-b border-gray-700 flex items-center">
-              {openFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className={`flex items-center space-x-2 px-4 py-2 cursor-pointer border-r border-gray-700 ${
-                    activeTab === file.id ? 'bg-gray-700' : 'hover:bg-gray-700'
-                  }`}
-                  onClick={() => setActiveTab(file.id)}
-                >
-                  <File className="w-4 h-4" />
-                  <span className="text-sm">{file.name}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-4 w-4 p-0 ml-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeFile(file.id);
+              {/* Create/upload buttons */}
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex space-x-1">
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
+                    onClick={() => {
+                      setCreateDialogType('folder');
+                      setCreateDialogPath(currentPath);
+                      setShowCreateDialog(true);
                     }}
                   >
-                    <X className="w-3 h-3" />
+                    <FolderPlus className="w-3 h-3" />
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
+                    onClick={() => {
+                      setCreateDialogType('file');
+                      setCreateDialogPath(currentPath);
+                      setShowCreateDialog(true);
+                    }}
+                  >
+                    <FilePlus className="w-3 h-3" />
                   </Button>
                 </div>
-              ))}
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Button size="sm" variant="outline" className="h-6 border-gray-600 hover:bg-gray-700">
+                    <Upload className="w-3 h-3 mr-1" />
+                    Upload
+                  </Button>
+                </label>
+                <Input
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                />
+              </div>
             </div>
-          )}
+            
+            <ScrollArea className="flex-1">
+              {getCurrentFolderContents().length === 0 ? (
+                <motion.div 
+                  className="text-center text-gray-500 py-8"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Empty folder</p>
+                </motion.div>
+              ) : (
+                getCurrentFolderContents().map(node => (
+                  <motion.div 
+                    key={node.id} 
+                    className="px-2 py-1"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div
+                      className={`flex items-center space-x-2 px-2 py-1 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
+                        selectedFile?.id === node.id ? 'bg-blue-600' : ''
+                      }`}
+                      onClick={() => {
+                        if (node.type === 'folder') {
+                          navigateToFolder(node.path);
+                        } else {
+                          openFile(node);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          node
+                        });
+                      }}
+                    >
+                      {node.type === 'folder' ? (
+                        <Folder className="w-4 h-4 text-blue-400" />
+                      ) : (
+                        getFileIcon(node.name)
+                      )}
+                      <span className="text-sm text-gray-200">{node.name}</span>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </ScrollArea>
+          </div>
+        </ResizablePanel>
 
-          {/* Editor and Chat Container */}
-          <div className="flex-1 flex h-full">
-            {/* Code Editor */}
+        <ResizableHandle withHandle />
+
+        {/* Editor */}
+        <ResizablePanel defaultSize={60} minSize={40}>
+          <div className="flex flex-col h-full">
+            {/* Tabs */}
+            {openFiles.length > 0 && (
+              <div className="bg-gray-800 border-b border-gray-700 flex items-center">
+                {openFiles.map((file) => (
+                  <motion.div
+                    key={file.id}
+                    className={`flex items-center space-x-2 px-4 py-2 cursor-pointer border-r border-gray-700 transition-colors ${
+                      activeTab === file.id ? 'bg-gray-700' : 'hover:bg-gray-700'
+                    }`}
+                    onClick={() => setActiveTab(file.id)}
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    {getFileIcon(file.name)}
+                    <span className="text-sm">{file.name}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-4 w-4 p-0 ml-2 hover:bg-gray-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeFile(file.id);
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            
+            {/* Editor */}
             <div className="flex-1">
               {selectedFile ? (
                 <Editor
@@ -1031,7 +1265,6 @@ export default function IDE() {
                   onChange={(value) => {
                     if (value !== undefined) {
                       setSelectedFile(prev => prev ? { ...prev, content: value } : null);
-                      // Auto-save after 2 seconds of inactivity
                       setTimeout(() => {
                         saveFile(selectedFile.id, value);
                       }, 2000);
@@ -1039,35 +1272,75 @@ export default function IDE() {
                   }}
                   theme="vs-dark"
                   options={{
-                    minimap: { enabled: false },
+                    minimap: { enabled: true },
                     fontSize: 14,
                     wordWrap: 'on',
                     automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    renderWhitespace: 'selection',
+                    cursorBlinking: 'smooth',
+                    cursorSmoothCaretAnimation: "on",
+                    smoothScrolling: true,
+                  }}
+                  beforeMount={(monaco) => {
+                    monaco.editor.defineTheme('futuristic', {
+                      base: 'vs-dark',
+                      inherit: true,
+                      rules: [
+                        { token: '', foreground: 'D4D4D4', background: '1A1A1A' },
+                        { token: 'keyword', foreground: '569CD6' },
+                        { token: 'type', foreground: '4EC9B0' },
+                        { token: 'string', foreground: 'CE9178' },
+                        { token: 'number', foreground: 'B5CEA8' },
+                        { token: 'comment', foreground: '6A9955' },
+                      ],
+                      colors: {
+                        'editor.background': '#1A1A1A',
+                        'editor.lineHighlightBackground': '#2A2A2A',
+                        'editorCursor.foreground': '#A6E22E',
+                        'editor.selectionBackground': '#3E3E3E',
+                        'editor.inactiveSelectionBackground': '#3E3E3E',
+                      }
+                    });
+                    monaco.editor.setTheme('futuristic');
                   }}
                 />
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
+                <motion.div 
+                  className="flex items-center justify-center h-full text-gray-500"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                >
                   <div className="text-center">
-                    <File className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <FileCode className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg">No file selected</p>
                     <p className="text-sm text-gray-600 mt-2">Open a file from the explorer to start coding</p>
                   </div>
-                </div>
+                </motion.div>
               )}
             </div>
+          </div>
+        </ResizablePanel>
 
-            {/* AI Chat */}
-            {showAIChat && (
-              <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col h-full">
+        {/* AI Chat Panel */}
+        {showAIChat && (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={20} minSize={15}>
+              <div className="w-full h-full bg-gray-800 border-l border-gray-700 flex flex-col">
                 <div className="p-4 border-b border-gray-700 flex-shrink-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">AI Assistant</h3>
+                    <h3 className="font-semibold flex items-center">
+                      <Brain className="w-5 h-5 mr-2 text-purple-500" />
+                      AI Assistant
+                    </h3>
                     <div className="flex space-x-2">
                       <Button 
                         variant="ghost" 
                         size="sm" 
                         onClick={() => setChatMessages([])}
-                        className="text-xs"
+                        className="text-xs hover:bg-gray-700"
                       >
                         <RotateCcw className="w-3 h-3 mr-1" />
                         Clear
@@ -1076,103 +1349,86 @@ export default function IDE() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-  <div 
-    ref={chatRef}
-    className="h-full max-h-[calc(100vh-300px)] overflow-y-auto p-4 space-y-4"
-  >
+                  <ScrollArea 
+                    ref={chatRef}
+                    className="h-full max-h-[calc(100vh-300px)] p-4 space-y-4"
+                  >
                     {chatMessages.map((message) => (
-                      <div
+                      <motion.div
                         key={message.id}
                         className={cn(
                           "flex",
                           message.role === 'user' ? 'justify-end' : 'justify-start'
                         )}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
                       >
-                        {message.isCode ? (
-                          <div className="w-full">
-                            <div className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600">
-                              <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
-                                <span className="text-xs text-gray-400">{message.language || 'code'}</span>
-                                <CopyToClipboard text={message.content}>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </Button>
-                                </CopyToClipboard>
-                              </div>
-                              <pre className="p-3 overflow-x-auto">
-                                <code className={`language-${message.language || 'plaintext'}`}>
-                                  {message.content}
-                                </code>
-                              </pre>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            className={cn(
-                              "max-w-xs px-3 py-2 rounded-lg",
-                              message.role === 'user' 
-                                ? 'bg-blue-600 text-white' 
-                                : 'bg-gray-700 text-gray-200'
-                            )}
+                        <div
+                          className={cn(
+                            "max-w-xs px-3 py-2 rounded-lg transition-all",
+                            message.role === 'user' 
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' 
+                              : 'bg-gray-700 text-gray-200'
+                          )}
+                        >
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={{
+                              code({node, inline = false, className, children, ...props}: {
+                                node?: any;
+                                inline?: boolean;
+                                className?: string;
+                                children?: React.ReactNode;
+                              }) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return !inline ? (
+                                  <div className="relative group">
+                                    <CopyToClipboard text={String(children).replace(/\n$/, '')}>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 hover:bg-gray-700"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </Button>
+                                    </CopyToClipboard>
+                                    <pre className={className}>
+                                      <code {...props}>
+                                        {children}
+                                      </code>
+                                    </pre>
+                                  </div>
+                                ) : (
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
                           >
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              rehypePlugins={[rehypeHighlight]}
-                              components={{
-                                code({node, inline = false, className, children, ...props}: {
-                                  node?: any;
-                                  inline?: boolean;
-                                  className?: string;
-                                  children?: React.ReactNode;
-                                }) {
-                                  const match = /language-(\w+)/.exec(className || '');
-                                  return !inline ? (
-                                    <div className="relative">
-                                      <CopyToClipboard text={String(children).replace(/\n$/, '')}>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100"
-                                        >
-                                          <Copy className="w-3 h-3" />
-                                        </Button>
-                                      </CopyToClipboard>
-                                      <pre className={className}>
-                                        <code {...props}>
-                                          {children}
-                                        </code>
-                                      </pre>
-                                    </div>
-                                  ) : (
-                                    <code className={className} {...props}>
-                                      {children}
-                                    </code>
-                                  );
-                                }
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
-                          </div>
-                        )}
-                      </div>
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      </motion.div>
                     ))}
                     {isLoading && (
-                      <div className="flex justify-start">
+                      <motion.div 
+                        className="flex justify-start"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                      >
                         <div className="px-3 py-2 rounded-lg bg-gray-700 text-gray-200">
                           <div className="flex space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"></div>
-                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                            <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce"></div>
+                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     )}
-                  </div>
+                  </ScrollArea>
                 </div>
                 <div className="p-4 border-t border-gray-700 flex-shrink-0">
                   <div className="flex space-x-2">
@@ -1185,32 +1441,45 @@ export default function IDE() {
                           sendChatMessage(chatInput);
                         }
                       }}
-                      className="flex-1"
+                      className="flex-1 bg-gray-700 border-gray-600 focus:border-blue-500"
                     />
                     <Button 
                       onClick={() => sendChatMessage(chatInput)} 
                       size="sm"
                       disabled={isLoading}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                     >
                       <Send className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </ResizablePanel>
+          </>
+        )}
+      </ResizablePanelGroup>
 
-      {/* Terminal at Bottom */}
-      <div className="h-64 bg-gray-800 border-t border-gray-700 flex flex-col">
+      {/* Terminal */}
+      <div 
+        className="bg-gray-800 border-t border-gray-700 flex flex-col relative"
+        style={{ height: `${terminalHeight}px` }}
+      >
+        <div 
+          className="absolute top-0 left-0 right-0 h-2 cursor-row-resize z-10"
+          ref={terminalResizeRef}
+          onMouseDown={() => setIsDraggingTerminal(true)}
+        />
         <div className="flex items-center justify-between p-2 border-b border-gray-700">
-          <h3 className="font-semibold text-sm">TERMINAL</h3>
+          <h3 className="font-semibold text-sm flex items-center">
+            <Terminal className="w-4 h-4 mr-2 text-green-500" />
+            Terminal
+          </h3>
           <div className="flex items-center space-x-2">
             <Button 
               size="sm" 
               variant="outline" 
               onClick={() => executeTerminalCommand('clear')}
+              className="hover:bg-gray-700 border-gray-600"
             >
               <Trash2 className="w-4 h-4 mr-1" />
               Clear
@@ -1219,37 +1488,50 @@ export default function IDE() {
               size="sm" 
               variant="outline" 
               onClick={() => setShowTerminal(!showTerminal)}
+              className="hover:bg-gray-700 border-gray-600"
             >
               {showTerminal ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </Button>
           </div>
         </div>
         {showTerminal && (
-          <div className="flex-1 p-2">
-            <div ref={terminalRef} className="h-full bg-black rounded p-2 font-mono text-sm overflow-y-auto">
+          <div className="flex-1 flex flex-col">
+            <ScrollArea 
+              ref={terminalRef}
+              className="flex-1 p-2 font-mono text-sm"
+            >
               {terminalOutput.map((line, index) => (
-                <div key={index} className={`${
-                  line.type === 'input' ? 'text-green-400' :
-                  line.type === 'error' ? 'text-red-400' :
-                  'text-gray-300'
-                }`}>
+                <motion.div 
+                  key={index} 
+                  className={`${
+                    line.type === 'input' ? 'text-green-400' :
+                    line.type === 'error' ? 'text-red-400' :
+                    'text-gray-300'
+                  }`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
                   {line.content}
-                </div>
+                </motion.div>
               ))}
-            </div>
-            <div className="flex items-center space-x-2 mt-2">
+              {isExecuting && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <span className="animate-pulse">⏺</span>
+                  <span>Running...</span>
+                </div>
+              )}
+            </ScrollArea>
+            <div className="flex items-center space-x-2 p-2 border-t border-gray-700">
               <span className="text-green-400">$</span>
               <Input
+                ref={terminalInputRef}
                 value={terminalInput}
                 onChange={(e) => setTerminalInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    executeTerminalCommand(terminalInput);
-                    setTerminalInput('');
-                  }
-                }}
+                onKeyDown={handleTerminalKeyDown}
                 placeholder="Enter command..."
-                className="flex-1 bg-black border-none text-green-400"
+                className="flex-1 bg-gray-700 border-gray-600 text-green-400 font-mono"
+                autoFocus
               />
             </div>
           </div>
@@ -1257,123 +1539,298 @@ export default function IDE() {
       </div>
 
       {/* Create File/Folder Dialog */}
-      {showCreateDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96">
-            <CardHeader>
-              <CardTitle>Create {createDialogType === 'file' ? 'File' : 'Folder'}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Name</label>
-                  <Input
-                    value={createDialogName}
-                    onChange={(e) => setCreateDialogName(e.target.value)}
-                    placeholder={`Enter ${createDialogType} name`}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        handleCreateFileOrFolder();
-                      }
-                    }}
-                  />
-                </div>
-                
-                {createDialogType === 'file' && (
-                  <div>
-                    <label className="text-sm font-medium">File Type</label>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.js') ? prev : prev + '.js')}
-                        className="text-xs"
+      <AnimatePresence>
+        {showCreateDialog && (
+          <motion.div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 20 }}
+            >
+              <Card className="w-96 bg-gray-800 border-gray-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    {createDialogType === 'file' ? (
+                      <FilePlus className="w-5 h-5 mr-2 text-blue-500" />
+                    ) : (
+                      <FolderPlus className="w-5 h-5 mr-2 text-blue-500" />
+                    )}
+                    Create {createDialogType === 'file' ? 'File' : 'Folder'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium">Name</label>
+                      <Input
+                        value={createDialogName}
+                        onChange={(e) => setCreateDialogName(e.target.value)}
+                        placeholder={`Enter ${createDialogType} name`}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleCreateFileOrFolder();
+                          }
+                        }}
+                        className="bg-gray-700 border-gray-600"
+                        autoFocus
+                      />
+                    </div>
+                    
+                    {createDialogType === 'file' && (
+                      <div>
+                        <label className="text-sm font-medium">File Type</label>
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.js') ? prev : prev + '.js')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            JavaScript
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.ts') ? prev : prev + '.ts')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            TypeScript
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.jsx') ? prev : prev + '.jsx')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            React
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.html') ? prev : prev + '.html')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            HTML
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.css') ? prev : prev + '.css')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            CSS
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.py') ? prev : prev + '.py')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            Python
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.java') ? prev : prev + '.java')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            Java
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.cpp') ? prev : prev + '.cpp')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            C++
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.go') ? prev : prev + '.go')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            Go
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.json') ? prev : prev + '.json')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            JSON
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreateDialogName(prev => prev.endsWith('.md') ? prev : prev + '.md')}
+                            className="text-xs border-gray-600 hover:bg-gray-700"
+                          >
+                            Markdown
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex space-x-2">
+                      <Button 
+                        onClick={handleCreateFileOrFolder} 
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                       >
-                        JavaScript (.js)
+                        Create {createDialogType === 'file' ? 'File' : 'Folder'}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.html') ? prev : prev + '.html')}
-                        className="text-xs"
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setShowCreateDialog(false)}
+                        className="flex-1 border-gray-600 hover:bg-gray-700"
                       >
-                        HTML (.html)
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.css') ? prev : prev + '.css')}
-                        className="text-xs"
-                      >
-                        CSS (.css)
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.py') ? prev : prev + '.py')}
-                        className="text-xs"
-                      >
-                        Python (.py)
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.json') ? prev : prev + '.json')}
-                        className="text-xs"
-                      >
-                        JSON (.json)
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateDialogName(prev => prev.endsWith('.md') ? prev : prev + '.md')}
-                        className="text-xs"
-                      >
-                        Markdown (.md)
+                        Cancel
                       </Button>
                     </div>
                   </div>
-                )}
-                
-                <div className="flex space-x-2">
-                  <Button onClick={handleCreateFileOrFolder} className="flex-1">
-                    Create {createDialogType === 'file' ? 'File' : 'Folder'}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowCreateDialog(false)}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Generate Project Modal */}
+      <AnimatePresence>
+        {showGenerateProjectModal && (
+          <motion.div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 20 }}
+            >
+              <Card className="w-[500px] max-w-[90vw] bg-gray-800 border-gray-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Zap className="w-5 h-5 mr-2 text-purple-500" />
+                    Generate Project
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Project Idea or Description</label>
+                      <textarea
+                        value={projectPrompt}
+                        onChange={(e) => setProjectPrompt(e.target.value)}
+                        placeholder="Describe your project idea in detail..."
+                        className="w-full h-32 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                        disabled={isGeneratingProject}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Framework (Optional)</label>
+                      <select
+                        value={projectFramework}
+                        onChange={(e) => setProjectFramework(e.target.value)}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                        disabled={isGeneratingProject}
+                      >
+                        <option value="">Select a framework (optional)</option>
+                        <option value="react">React</option>
+                        <option value="vue">Vue</option>
+                        <option value="angular">Angular</option>
+                        <option value="node">Node.js</option>
+                        <option value="express">Express</option>
+                        <option value="next">Next.js</option>
+                        <option value="django">Django</option>
+                        <option value="flask">Flask</option>
+                        <option value="rails">Ruby on Rails</option>
+                        <option value="spring">Spring Boot</option>
+                        <option value="mern">MERN Stack</option>
+                        <option value="mean">MEAN Stack</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Project Name (Optional)</label>
+                      <Input
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="Enter project name"
+                        className="bg-gray-700 border-gray-600 text-white"
+                        disabled={isGeneratingProject}
+                      />
+                    </div>
+                    
+                    <div className="flex space-x-2 pt-2">
+                      <Button 
+                        onClick={handleGenerateProject} 
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                        disabled={isGeneratingProject || !projectPrompt.trim()}
+                      >
+                        {isGeneratingProject ? (
+                          <>
+                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4 mr-2" />
+                            Generate
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setShowGenerateProjectModal(false)}
+                        className="flex-1 border-gray-600 hover:bg-gray-700"
+                        disabled={isGeneratingProject}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Context Menu */}
       {contextMenu && (
-        <div 
+        <motion.div 
           className="fixed z-50 bg-gray-800 border border-gray-600 rounded shadow-lg py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseLeave={() => setContextMenu(null)}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: 0.1 }}
         >
           {contextMenu.node?.type === 'folder' && (
             <>
               <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2"
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
                 onClick={() => {
-                  setSelectedFolder(contextMenu.node!.path);
+                  navigateToFolder(contextMenu.node!.path);
                   setContextMenu(null);
                 }}
               >
-                <FolderPlus className="w-4 h-4" />
-                <span>Select as target folder</span>
+                <FolderOpen className="w-4 h-4" />
+                <span>Open in Explorer</span>
               </button>
               <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2"
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
                 onClick={() => {
                   setCreateDialogType('file');
                   setCreateDialogPath(contextMenu.node!.path);
@@ -1385,7 +1842,7 @@ export default function IDE() {
                 <span>Create file here</span>
               </button>
               <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2"
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
                 onClick={() => {
                   setCreateDialogType('folder');
                   setCreateDialogPath(contextMenu.node!.path);
@@ -1400,7 +1857,7 @@ export default function IDE() {
           )}
           {contextMenu.node?.type === 'file' && (
             <button
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
               onClick={() => {
                 openFile(contextMenu.node!);
                 setContextMenu(null);
@@ -1412,7 +1869,7 @@ export default function IDE() {
           )}
           <div className="border-t border-gray-600 my-1"></div>
           <button
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 text-red-400"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 text-red-400 transition-colors"
             onClick={() => {
               if (contextMenu.node) {
                 deleteFile(contextMenu.node.id);
@@ -1423,95 +1880,7 @@ export default function IDE() {
             <Trash2 className="w-4 h-4" />
             <span>Delete</span>
           </button>
-        </div>
-      )}
-
-      {/* Generate Project Modal */}
-      {showGenerateProjectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-[500px] max-w-[90vw]">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Zap className="w-5 h-5 mr-2 text-purple-500" />
-                Generate Project
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Project Idea or Description</label>
-                  <textarea
-                    value={projectPrompt}
-                    onChange={(e) => setProjectPrompt(e.target.value)}
-                    placeholder="Describe your project idea in detail..."
-                    className="w-full h-32 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                    disabled={isGeneratingProject}
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Framework (Optional)</label>
-                  <select
-                    value={projectFramework}
-                    onChange={(e) => setProjectFramework(e.target.value)}
-                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                    disabled={isGeneratingProject}
-                  >
-                    <option value="">Select a framework (optional)</option>
-                    <option value="react">React</option>
-                    <option value="vue">Vue</option>
-                    <option value="angular">Angular</option>
-                    <option value="node">Node.js</option>
-                    <option value="express">Express</option>
-                    <option value="next">Next.js</option>
-                    <option value="django">Django</option>
-                    <option value="flask">Flask</option>
-                    <option value="rails">Ruby on Rails</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Project Name (Optional)</label>
-                  <Input
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    placeholder="Enter project name"
-                    className="bg-gray-700 border-gray-600 text-white"
-                    disabled={isGeneratingProject}
-                  />
-                </div>
-                
-                <div className="flex space-x-2 pt-2">
-                  <Button 
-                    onClick={handleGenerateProject} 
-                    className="flex-1 bg-purple-600 hover:bg-purple-700"
-                    disabled={isGeneratingProject || !projectPrompt.trim()}
-                  >
-                    {isGeneratingProject ? (
-                      <>
-                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Generate
-                      </>
-                    )}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowGenerateProjectModal(false)}
-                    className="flex-1"
-                    disabled={isGeneratingProject}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        </motion.div>
       )}
     </div>
   );

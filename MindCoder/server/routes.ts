@@ -15,8 +15,31 @@ import { connectToMongoDB } from './db.js';
 import { ObjectId } from 'mongodb';
 import { spawn, exec } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
+
+// Add this interface definition near the top of the file, after the other interfaces
+interface UserCreate {
+  username: string;
+  email: string;
+  password: string | null;
+  googleId?: string;
+  githubId?: string;
+  isVerified?: boolean;
+  otp?: string;
+  otpExpiry?: Date;
+  verificationToken?: string;
+}
+
+// Also add the GitHubUserCreate interface since it's used in the GitHub strategy
+interface GitHubUserCreate {
+  username: string;
+  email: string;
+  password: null;
+  githubId: string;
+  isVerified: boolean;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Session configuration
@@ -32,16 +55,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Passport configuration
   passport.serializeUser((user: any, done) => {
-    // Use user.id if available, otherwise fallback to user._id
     done(null, user.id || user._id);
   });
 
   passport.deserializeUser(async (id: any, done) => {
     try {
-      // Try to find by numeric id, then by MongoDB _id
       let user = await storage.getUser(id);
       if (!user && typeof id === 'string' && id.length === 24) {
-        // Try to find by MongoDB _id if needed
         const db = await connectToMongoDB();
         const mongoUser = await db.collection<MongoUser>('users').findOne({ _id: new ObjectId(id) });
         if (mongoUser) {
@@ -71,24 +91,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     _id: ObjectId;
   }
 
-  interface GoogleProfile {
-    id: string;
-    displayName?: string;
-    emails?: { value: string }[];
-  }
-
-  interface UserCreate {
-    username: string;
-    email: string;
-    password: null | string;
-    googleId?: string;
-    githubId?: string;
-    isVerified?: boolean;
-    otp?: string;
-    otpExpiry?: Date;
-    verificationToken?: string;
-  }
-
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
@@ -98,16 +100,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let user = await storage.getUserByGoogleId(profile.id);
       if (!user) {
-        // Try to find by email
         user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
         if (user) {
-          // Only link Google ID if not already set
           if (!user.googleId) {
             await storage.updateUser(Number(user.id), { googleId: profile.id, isVerified: true });
             user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
         } else {
-          // Create new user if not found
           user = await storage.createUser({
             username: profile.displayName || profile.emails?.[0]?.value?.split('@')[0] || `user_${profile.id}`,
             email: profile.emails?.[0]?.value || '',
@@ -124,45 +123,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
   // GitHub OAuth Strategy
-  interface GitHubProfile {
-    id: string;
-    username?: string;
-    emails?: { value: string }[];
-  }
-
-  interface GitHubUserCreate {
-    username: string;
-    email: string;
-    password: null;
-    githubId: string;
-    isVerified: boolean;
-  }
-
   passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID || '',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
     callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:5000/api/auth/github/callback'
-  }, async (accessToken: string, refreshToken: string, profile: GitHubProfile, done: (error: any, user?: User | null) => void) => {
+  }, async (accessToken: string, refreshToken: string, profile: any, done: (error: any, user?: User | null) => void) => {
     try {
       let user = await storage.getUserByGithubId(profile.id);
       if (!user) {
-        // Try to find by email
         user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
         if (user) {
-          // Only link GitHub ID if not already set
           if (!user.githubId) {
             await storage.updateUser(Number(user.id), { githubId: profile.id, isVerified: true });
             user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
         } else {
-          // Create new user if not found
           user = await storage.createUser({
             username: profile.username || `user_${profile.id}`,
             email: profile.emails?.[0]?.value || '',
             password: null,
             githubId: profile.id,
             isVerified: true
-          } as GitHubUserCreate);
+          } as UserCreate);
         }
       }
       return done(null, user);
@@ -176,7 +158,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, email, password } = insertUserSchema.parse(req.body);
       
-      // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: "User already exists" });
@@ -274,14 +255,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "OTP has expired. Please request a new one." });
       }
       
-      // Verify the user
       await storage.updateUser(Number(user.id), {
         isVerified: true,
         otp: null,
         otpExpiry: null
       });
       
-      // Generate token for auto-login
       const token = generateToken({
         ...user,
         id: user.id.toString(),
@@ -322,14 +301,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email already verified" });
       }
       
-      // Generate new OTP
       const otp = generateOTP();
       const otpExpiry = getOTPExpiry();
       
-      // Update user with new OTP
       await storage.updateUser(Number(user.id), { otp, otpExpiry });
       
-      // Send new OTP email
       await sendOTPVerificationEmail(email, otp);
       
       res.json({
@@ -367,35 +343,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Middleware to verify JWT token
   const authenticateToken = (req: any, res: any, next: any) => {
-    console.log('authenticateToken middleware entered');
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    // Development mode bypass for testing
     if (process.env.NODE_ENV === 'development' && !token) {
-      // Create a mock user for development
       req.user = {
         id: 1,
         email: 'dev@example.com',
         isVerified: true
       };
-      console.log('Development mode: Mock user set:', req.user);
       return next();
     }
 
-    console.log('Token received by authenticateToken:', token);
     if (!token) {
-      console.log('No token provided. Access denied.');
       return res.status(401).json({ message: 'Access token required' });
     }
 
     try {
       const decoded = verifyToken(token);
       req.user = decoded;
-      console.log('Token authenticated. User:', req.user);
       next();
     } catch (error) {
-      console.log('Invalid token:', error);
       return res.status(403).json({ message: 'Invalid token' });
     }
   };
@@ -403,7 +371,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes
   app.get("/api/projects", authenticateToken, async (req: any, res) => {
     try {
-      console.log('req.user in /api/projects:', req.user);
       const projects = await storage.getUserProjects(req.user.id);
       res.json(projects);
     } catch (error) {
@@ -433,8 +400,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, framework, description, model = 'together' } = req.body;
       
-      console.log('Generating project with:', { name, framework, description, model });
-      
       const generatedProject = await generateProjectWithAI({
         prompt: description,
         model,
@@ -442,7 +407,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name
       });
       
-      // Create the project in storage
       const project = await storage.createProject({
         name: generatedProject.name || name,
         framework: generatedProject.framework || framework,
@@ -524,8 +488,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { instruction, model = 'together', context, language } = req.body;
       
-      console.log('Generating code with:', { instruction, model, context, language });
-      
       if (!instruction) {
         return res.status(400).json({ message: 'Instruction is required' });
       }
@@ -549,13 +511,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { message, model = 'together', chatHistory, projectContext } = req.body;
       
-      console.log('AI Chat request:', { message, model, hasProjectContext: !!projectContext });
-      
       if (!message) {
         return res.status(400).json({ message: 'Message is required' });
       }
       
-      // Enhanced context for better AI responses
       let enhancedPrompt = message;
       
       if (projectContext) {
@@ -657,7 +616,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/ide/files", authenticateToken, async (req: any, res) => {
     try {
-      // Return a sample file structure for now
       const files = [
         { name: 'src', type: 'folder', path: '/workspace/src' },
         { name: 'index.html', type: 'file', path: '/workspace/src/index.html' },
@@ -678,356 +636,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { command, workingDirectory } = req.body;
       
-      // In a real implementation, this would execute commands in a sandboxed environment
-      // For now, we'll simulate command execution with better file handling
-      let result = '';
+      const tempDir = join(tmpdir(), `devmindx-${uuidv4()}`);
+      mkdirSync(tempDir, { recursive: true });
       
-      if (command.startsWith('ls') || command.startsWith('dir')) {
-        // Get files from the user's project
-        const project = await storage.getUserProjects(req.user.id);
-        if (project.length > 0) {
-          const files = project[0].files || {};
-          result = Object.keys(files).map(file => `📄 ${file}`).join('\n');
-        } else {
-          result = 'No files found in workspace';
-        }
-      } else if (command.startsWith('cat ') || command.startsWith('type ')) {
-        const fileName = command.split(' ')[1];
-        const project = await storage.getUserProjects(req.user.id);
-        if (project.length > 0) {
-          const files: Record<string, string> = project[0].files as Record<string, string> || {};
-          result = files[fileName] || 'File not found';
-        } else {
-          result = 'File not found';
-        }
-      } else if (command.startsWith('node ') || command.startsWith('python ') || command.startsWith('npm ')) {
-        result = 'Command executed successfully! Check the output above for results.';
-      } else if (command === 'clear') {
-        res.json({ output: '', exitCode: 0 });
-        return;
+      let result = '';
+      let error = '';
+      
+      if (command.startsWith('npm install') || command.startsWith('npm i')) {
+        const process = spawn('npm', ['install'], { 
+          cwd: tempDir,
+          shell: true 
+        });
+        
+        await new Promise<void>((resolve, reject) => {
+          process.stdout.on('data', (data) => {
+            result += data.toString();
+          });
+          
+          process.stderr.on('data', (data) => {
+            error += data.toString();
+          });
+          
+          process.on('close', (code) => {
+            if (code !== 0) {
+              reject(new Error(error || `npm install failed with code ${code}`));
+            } else {
+              resolve();
+            }
+          });
+        });
       } else {
-        result = `Command '${command}' executed successfully.`;
+        const process = spawn(command, {
+          cwd: tempDir,
+          shell: true
+        });
+        
+        await new Promise<void>((resolve, reject) => {
+          process.stdout.on('data', (data) => {
+            result += data.toString();
+          });
+          
+          process.stderr.on('data', (data) => {
+            error += data.toString();
+          });
+          
+          process.on('close', (code) => {
+            if (code !== 0) {
+              reject(new Error(error || `Command failed with code ${code}`));
+            } else {
+              resolve();
+            }
+          });
+        });
       }
       
       res.json({ output: result, exitCode: 0 });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to execute command' });
+    } catch (err) {
+      res.status(500).json({ 
+        error: err instanceof Error ? err.message : 'Command execution failed',
+        output: err instanceof Error ? err.message : ''
+      });
     }
   });
 
-  // Real code execution endpoint
-  app.post("/api/ide/run", authenticateToken, async (req: any, res) => {
+  // Real code execution endpoint with enhanced support
+  app.post("/api/ide/run", authenticateToken, async (req, res) => {
+    const { filePath, content, language } = req.body;
+    
+    if (!content || !language) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+    
+    const tempDir = join(tmpdir(), `devmindx-${uuidv4()}`);
+    const fileName = filePath.split('/').pop() || `code.${language}`;
+    const tempFilePath = join(tempDir, fileName);
+    
     try {
-      const { filePath, content, language } = req.body;
-      
-      if (!filePath || !content) {
-        return res.status(400).json({ error: 'File path and content are required' });
-      }
-
-      // Create a temporary directory for execution
-      const tempDir = join(__dirname, 'temp', uuidv4());
       if (!existsSync(tempDir)) {
         mkdirSync(tempDir, { recursive: true });
       }
-
-      let output: string[] = [];
-      let exitCode = 0;
-      let url: string | undefined = undefined;
-
-      try {
-        switch (language) {
-          case 'javascript':
-            output = await executeJavaScript(content, tempDir);
-            break;
-          case 'typescript':
-            output = await executeTypeScript(content, tempDir);
-            break;
-          case 'python':
-            output = await executePython(content, tempDir);
-            break;
-          case 'html': {
-            const result = await executeHTML(content, tempDir);
-            output = result.output;
-            url = result.url;
-            break;
+      
+      writeFileSync(tempFilePath, content);
+      
+      if (language === 'javascript' && content.includes('require(')) {
+        writeFileSync(join(tempDir, 'package.json'), JSON.stringify({
+          name: "temp-project",
+          version: "1.0.0",
+          main: fileName,
+          scripts: {
+            start: "node " + fileName
           }
-          case 'css':
-            output = await executeCSS(content, tempDir);
-            break;
-          case 'json':
-            output = await executeJSON(content, tempDir);
-            break;
-          default:
-            output = [`Language '${language}' is not supported for execution`];
-            exitCode = 1;
-        }
-      } finally {
-        // Clean up temporary files
-        try {
-          if (existsSync(tempDir)) {
-            exec(`rm -rf "${tempDir}"`, (error) => {
-              if (error) console.error('Failed to cleanup temp dir:', error);
-            });
-          }
-        } catch (cleanupError) {
-          console.error('Cleanup error:', cleanupError);
-        }
+        }));
       }
       
-      res.json({ output, exitCode, url });
+      let command: string;
+      let args: string[] = [];
+      
+      switch (language) {
+        case 'javascript':
+          command = 'node';
+          args = [tempFilePath];
+          break;
+        case 'typescript':
+          await new Promise<void>((resolve, reject) => {
+            exec('npm install -g ts-node typescript', (error) => {
+              if (error) reject(error);
+              else resolve();
+            });
+          });
+          command = 'ts-node';
+          args = [tempFilePath];
+          break;
+        case 'python':
+          command = 'python';
+          args = [tempFilePath];
+          break;
+        case 'java':
+          const className = fileName.replace('.java', '');
+          await new Promise<void>((resolve, reject) => {
+            exec(`javac ${tempFilePath}`, { cwd: tempDir }, (error) => {
+              if (error) reject(error);
+              else resolve();
+            });
+          });
+          command = 'java';
+          args = ['-cp', tempDir, className];
+          break;
+        case 'cpp':
+          const outputFile = join(tempDir, 'a.out');
+          await new Promise<void>((resolve, reject) => {
+            exec(`g++ ${tempFilePath} -o ${outputFile}`, (error) => {
+              if (error) reject(error);
+              else resolve();
+            });
+          });
+          command = outputFile;
+          break;
+        case 'html':
+          return res.json({ 
+            output: 'HTML file saved. Open in browser to view.',
+            filePath: tempFilePath 
+          });
+        default:
+          return res.status(400).json({ error: `Unsupported language: ${language}` });
+      }
+      
+      const process = spawn(command, args, {
+        cwd: tempDir
+      });
+      
+      let output = '';
+      let errorOutput = '';
+      
+      if (req.body.stdin) {
+        process.stdin.write(req.body.stdin + '\n');
+        process.stdin.end();
+      }
+      
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      process.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+      
+      const exitCode = await new Promise<number>((resolve) => {
+        process.on('close', (code) => {
+          resolve(code || 0);
+        });
+      });
+      
+      try {
+        unlinkSync(tempFilePath);
+        if (language === 'cpp' && existsSync(join(tempDir, 'a.out'))) {
+          unlinkSync(join(tempDir, 'a.out'));
+        }
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
+      
+      if (exitCode !== 0) {
+        return res.json({ 
+          error: errorOutput || `Process exited with code ${exitCode}`,
+          output: output
+        });
+      }
+      
+      return res.json({ output });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      res.status(500).json({ 
-        error: 'Failed to run project',
-        details: errorMessage 
+      console.error('Code execution error:', error);
+      return res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        output: error instanceof Error ? error.message : ''
       });
     }
   });
 
-  // Execute JavaScript code
-  async function executeJavaScript(content: string, tempDir: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const filePath = join(tempDir, 'script.js');
-      writeFileSync(filePath, content);
-
-      const child = spawn('node', [filePath], {
-        cwd: tempDir,
-        timeout: 10000, // 10 second timeout
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        const output: string[] = [];
-        if (stdout) output.push(...stdout.trim().split('\n'));
-        if (stderr) output.push(`Error: ${stderr.trim()}`);
-        if (code !== 0 && !stderr) output.push(`Process exited with code ${code}`);
-        resolve(output);
-      });
-
-      child.on('error', (error) => {
-        reject(new Error(`Failed to execute JavaScript: ${error.message}`));
-      });
-    });
-  }
-
-  // Execute TypeScript code
-  async function executeTypeScript(content: string, tempDir: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const tsFilePath = join(tempDir, 'script.ts');
-      const jsFilePath = join(tempDir, 'script.js');
-      writeFileSync(tsFilePath, content);
-
-      // First compile TypeScript to JavaScript
-      const compileProcess = spawn('npx', ['tsc', tsFilePath, '--outDir', tempDir, '--target', 'es2020'], {
-        cwd: tempDir,
-        timeout: 15000
-      });
-
-      let compileStderr = '';
-      compileProcess.stderr.on('data', (data) => {
-        compileStderr += data.toString();
-      });
-
-      compileProcess.on('close', (code) => {
-        if (code !== 0) {
-          resolve([`TypeScript compilation failed: ${compileStderr}`]);
-          return;
-        }
-
-        // Then execute the compiled JavaScript
-        const child = spawn('node', [jsFilePath], {
-          cwd: tempDir,
-          timeout: 10000,
-          stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        child.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('close', (code) => {
-          const output: string[] = [];
-          if (stdout) output.push(...stdout.trim().split('\n'));
-          if (stderr) output.push(`Error: ${stderr.trim()}`);
-          if (code !== 0 && !stderr) output.push(`Process exited with code ${code}`);
-          resolve(output);
-        });
-
-        child.on('error', (error) => {
-          reject(new Error(`Failed to execute TypeScript: ${error.message}`));
-        });
-      });
-
-      compileProcess.on('error', (error) => {
-        reject(new Error(`Failed to compile TypeScript: ${error.message}`));
-      });
-    });
-  }
-
-  // Execute Python code
-  async function executePython(content: string, tempDir: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const filePath = join(tempDir, 'script.py');
-      writeFileSync(filePath, content);
-
-      const child = spawn('python', [filePath], {
-        cwd: tempDir,
-        timeout: 10000,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        const output: string[] = [];
-        if (stdout) output.push(...stdout.trim().split('\n'));
-        if (stderr) output.push(`Error: ${stderr.trim()}`);
-        if (code !== 0 && !stderr) output.push(`Process exited with code ${code}`);
-        resolve(output);
-      });
-
-      child.on('error', (error) => {
-        reject(new Error(`Failed to execute Python: ${error.message}`));
-      });
-    });
-  }
-
-  // Execute HTML (serve and open in browser simulation)
-  async function executeHTML(content: string, tempDir: string): Promise<{output: string[], url: string}> {
-    return new Promise((resolve) => {
-      const filePath = join(tempDir, 'index.html');
-      writeFileSync(filePath, content);
-
-      // Create a simple HTTP server to serve the HTML
-      const http = require('http');
-      const fs = require('fs');
-      
-      const server = http.createServer((req: any, res: any) => {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(content);
-      });
-
-      server.listen(0, () => {
-        const port = server.address().port;
-        const url = `http://localhost:${port}`;
-        
-        const output = [
-          'HTML file served successfully!',
-          `🌐 View your HTML at: ${url}`,
-          'Content preview:',
-          '---',
-          content.substring(0, 500) + (content.length > 500 ? '...' : ''),
-          '---',
-          `File saved to: ${filePath}`,
-          'Server will close automatically after 30 seconds.'
-        ];
-
-        // Close server after 30 seconds
-        setTimeout(() => {
-          server.close();
-        }, 30000);
-
-        resolve({ output, url });
-      });
-
-      server.on('error', (error: any) => {
-        resolve({
-          output: [
-            'Failed to serve HTML file',
-            `Error: ${error.message}`,
-            'Content preview:',
-            '---',
-            content.substring(0, 500) + (content.length > 500 ? '...' : ''),
-            '---'
-          ],
-          url: ''
-        });
-      });
-    });
-  }
-
-  // Execute CSS (validate and preview)
-  async function executeCSS(content: string, tempDir: string): Promise<string[]> {
-    return new Promise((resolve) => {
-      const filePath = join(tempDir, 'styles.css');
-      writeFileSync(filePath, content);
-
-      // Basic CSS validation
-      const output = [
-        'CSS file created successfully!',
-        'Content preview:',
-        '---',
-        content.substring(0, 300) + (content.length > 300 ? '...' : ''),
-        '---',
-        `File saved to: ${filePath}`,
-        'Link this CSS file in your HTML to see the styles.'
-      ];
-
-      resolve(output);
-    });
-  }
-
-  // Execute JSON (validate and format)
-  async function executeJSON(content: string, tempDir: string): Promise<string[]> {
-    return new Promise((resolve) => {
-      try {
-        const parsed = JSON.parse(content);
-        const formatted = JSON.stringify(parsed, null, 2);
-        
-        const filePath = join(tempDir, 'data.json');
-        writeFileSync(filePath, formatted);
-
-        const output = [
-          'JSON file validated and formatted successfully!',
-          'Content preview:',
-          '---',
-          formatted.substring(0, 300) + (formatted.length > 300 ? '...' : ''),
-          '---',
-          `File saved to: ${filePath}`
-        ];
-
-        resolve(output);
-      } catch (error) {
-        resolve([
-          'JSON validation failed!',
-          `Error: ${error instanceof Error ? error.message : 'Invalid JSON format'}`,
-          'Please check your JSON syntax.'
-        ]);
-      }
-    });
-  }
-
   app.post("/api/ide/upload", authenticateToken, async (req: any, res) => {
     try {
-      // Handle file uploads
-      // In a real implementation, this would save files to the user's workspace
       res.json({ message: "Files uploaded successfully" });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -1038,7 +845,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/mongo-test', async (req, res) => {
     try {
       const db = await connectToMongoDB();
-      // List collections as a test
       const collections = await db.listCollections().toArray();
       res.json({ success: true, collections });
     } catch (err) {
