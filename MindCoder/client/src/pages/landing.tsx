@@ -6,6 +6,10 @@ import { UserProfile } from "@/components/user-profile";
 import { Code, Brain, Zap, Users, CheckCircle, Star, ArrowRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
+import { CardCarousel } from "@/components/ui/card-carousel";
+import { SlideButton } from "@/components/ui/slide-button";
+import { TextScroll } from "@/components/ui/text-scroll";
+
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -180,28 +184,34 @@ export default function Landing() {
               {" "}AI Power
             </span>
           </h1>
-          <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
+          {/* <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
             Transform your ideas into complete applications using natural language. 
             Our AI IDE supports multiple LLM models and generates production-ready code instantly.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Button
-              size="lg"
-              onClick={isAuthenticated ? () => navigate('/ide') : () => navigate('/login')}
-              className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-4"
-            >
-              {isAuthenticated ? "Launch AI IDE" : "Launch AI IDE"}
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="border-gray-600 text-gray-300 hover:text-white text-lg px-8 py-4"
-              onClick={handleWatchDemoClick}
-            >
-              Watch Demo
-            </Button>
-          </div>
+          </p> */}
+          
+           <TextScroll
+  className="font-display text-center text-xl font-semibold tracking-tight text-gray-300 max-w-3xl mx-auto md:text-2xl md:leading-relaxed"
+  text="Transform your ideas into complete applications using natural language. Our AI IDE supports multiple LLM models and generates production-ready code instantly. "
+  default_velocity={5}
+/>
+
+          <div className="flex flex-col gap-4 items-center mb-12">
+          <SlideButton
+            onComplete={() => isAuthenticated ? navigate('/ide') : navigate('/login')}
+            className="[&>*]:!text-blue-600 hover:[&>*]:!text-white bg-blue-600 hover:bg-blue-700"
+          >
+            Launch AI IDE
+          </SlideButton>
+          
+          <Button 
+            size="lg" 
+            variant="outline" 
+            className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white text-lg px-8 py-4"
+            onClick={() => setShowDemoVideo(true)}
+          >
+            Watch Demo
+          </Button>
+        </div>
         </div>
       </section>
 
@@ -260,6 +270,7 @@ export default function Landing() {
                       {demoSlides[currentSlide].description}
                     </p>
                   </div>
+ 
                   
                   {/* Slide indicators */}
                   <div className="flex justify-center space-x-2 mb-4">
@@ -299,11 +310,11 @@ export default function Landing() {
                     }}
                   >
                     {/* Your video FIRST - browser will try this first */}
-                    <source src="/assets/demo-video.mp4" type="video/mp4" />
+                    <source src="https://www.youtube.com/watch?v=m3o-p7dOGTo" />
                     
                     {/* Fallback videos only if yours fails */}
-                    <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
-                    <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
+                    <source src="https://youtu.be/m3o-p7dOGTo?si=13Nsiam7B9XNE0rj" type="video/mp4" />
+                    <source src="https://youtu.be/m3o-p7dOGTo?si=13Nsiam7B9XNE0rj" type="video/mp4" />
                     
                     Your browser does not support the video tag.
                   </video>
@@ -388,7 +399,53 @@ export default function Landing() {
               Select from the world's most advanced language models for your development needs
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          
+          {/* LLM Card Carousel */}
+          <CardCarousel
+            images={[
+              {
+                src: "/images/Together.png", 
+                alt: "Together AI",
+                title: "Together AI",
+                description: "Open-source models for various development tasks",
+                badge: "Unified AI",
+                complexity: "Medium",
+                capabilities: ["Code Generation", "Debugging", "Refactoring", "Documentation", "Code Review"]
+              },
+              {
+                src: "/images/chatgpt.png",
+                alt: "ChatGPT",
+                title: "ChatGPT",
+                description: "OpenAI's powerful language model for code and natural language",
+                badge: "GPT-4",
+                complexity: "High",
+                capabilities: ["Natural Language", "Code Completion", "Problem Solving", "Explanation", "Debugging"]
+              },
+              {
+                src: "/images/Gemini.png",
+                alt: "Gemini",
+                title: "Gemini",
+                description: "Google's multimodal AI model with advanced reasoning capabilities",
+                badge: "Multimodal",
+                complexity: "High",
+                capabilities: ["Code Generation", "Image Analysis", "Reasoning", "Documentation", "Testing"]
+              },
+              {
+                src: "/images/Claude.png",
+                alt: "Claude",
+                title: "Claude",
+                description: "Anthropic's helpful, harmless, and honest AI assistant",
+                badge: "Claude 3",
+                complexity: "Medium",
+                capabilities: ["Long Context", "Code Understanding", "Documentation", "Explanation", "Reasoning"]
+              }
+            ]}
+            autoplayDelay={5000}
+            showPagination={true}
+            showNavigation={true}
+          />
+          
+          <div className="grid md:grid-cols-3 gap-8 mt-16">
             {aiModels.map((model, index) => (
               <Card key={index} className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-colors relative">
                 <CardHeader>
