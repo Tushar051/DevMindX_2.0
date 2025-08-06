@@ -38,10 +38,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Connect to MongoDB at server startup
-connectToMongoDB().catch((err: any) => {
-  console.error('Failed to connect to MongoDB:', err);
-});
+// Connect to MongoDB at server startup and initialize collections
+import { ensureChatHistoryCollection } from './models/chatHistory.js';
+
+// Connect to MongoDB and initialize collections
+(async () => {
+  try {
+    const db = await connectToMongoDB();
+    // Initialize collections with proper schemas
+    if (db) {
+      await ensureChatHistoryCollection(db);
+      console.log('MongoDB collections initialized');
+    }
+  } catch (err: any) {
+    console.error('Failed to connect to MongoDB:', err);
+  }
+})();
 
 (async () => {
   const server = await registerRoutes(app);

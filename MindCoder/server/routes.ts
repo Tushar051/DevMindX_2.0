@@ -510,6 +510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/chat", authenticateToken, async (req: any, res) => {
     try {
       const { message, model = 'together', chatHistory, projectContext } = req.body;
+      const userId = req.user.id;
       
       if (!message) {
         return res.status(400).json({ message: 'Message is required' });
@@ -539,6 +540,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         projectContext
       });
       
+      // Save chat message to history
+      const db = await connectToMongoDB();
+      
+      // Create user message object
+      const userMessage = {
+        id: new ObjectId().toString(),
+        role: 'user',
+        content: message,
+        createdAt: new Date()
+      };
+      
+      // Create assistant message object
+      const assistantMessage = {
+        id: new ObjectId().toString(),
+        role: 'assistant',
+        content: result.content,
+        createdAt: new Date()
+      };
+      
+      // Update chat history in MongoDB using upsert with proper typing
+      await db.collection('chatHistory').updateOne(
+        { userId },
+        { 
+          $push: { 
+            'messages': { 
+              $each: [userMessage, assistantMessage],
+              $slice: -100 // Keep only the last 100 messages
+            } 
+          } as any,
+          $setOnInsert: { createdAt: new Date() },
+          $set: { updatedAt: new Date() }
+        },
+        { upsert: true }
+      );
+      
       res.json(result);
     } catch (error) {
       console.error('Chat error:', error);
@@ -565,15 +601,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Chat routes with better error handling
-  app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
-    try {
-      const chatSession = await storage.getProjectChatSession(parseInt(req.params.projectId));
-      res.json(chatSession || { messages: [] });
-    } catch (error: any) {
-      console.error('Get chat error:', error);
-      res.status(500).json({ message: error.message || 'Failed to get chat session' });
+
+// Get user's chat history
+app.get("/api/chat/history", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const db = await connectToMongoDB();
+    
+    // Get chat history from MongoDB
+    const chatHistory = await db.collection('chatHistory').findOne({ userId });
+    
+    if (chatHistory) {
+      res.json({ messages: chatHistory.messages || [] });
+    } else {
+      res.json({ messages: [] });
     }
-  });
+  } catch (error: any) {
+    console.error('Get chat history error:', error);
+    res.status(500).json({ message: error.message || 'Failed to get chat history' });
+  }
+});
+
+// Clear user's chat history
+app.delete("/api/chat/history", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const db = await connectToMongoDB();
+    
+    // Delete chat history from MongoDB
+    await db.collection('chatHistory').deleteOne({ userId });
+    
+    res.json({ message: 'Chat history cleared successfully' });
+  } catch (error: any) {
+    console.error('Clear chat history error:', error);
+    res.status(500).json({ message: error.message || 'Failed to clear chat history' });
+  }
+});
+
+// Get project-specific chat session
+app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
+  try {
+    const chatSession = await storage.getProjectChatSession(parseInt(req.params.projectId));
+    res.json(chatSession || { messages: [] });
+  } catch (error: any) {
+    console.error('Get chat error:', error);
+    res.status(500).json({ message: error.message || 'Failed to get chat session' });
+  }
+});
 
   // IDE-specific routes with better error handling
   app.post("/api/ide/files", authenticateToken, async (req: any, res) => {

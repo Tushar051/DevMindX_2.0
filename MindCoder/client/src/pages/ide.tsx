@@ -52,7 +52,9 @@ import {
   FileCode,
   FileJson,
   FileImage,
-  FileArchive
+  FileArchive,
+  History,
+  Loader2
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { useAuth } from '@/hooks/use-auth';
@@ -242,6 +244,7 @@ export default function IDE() {
   const [isDraggingTerminal, setIsDraggingTerminal] = useState(false);
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -259,7 +262,24 @@ export default function IDE() {
     setSelectedFile(null);
     setOpenFiles([]);
     setActiveTab('');
+    
+    // Add a test message to the chat
+    const testMessage: ChatMessage = {
+      id: 'test-message',
+      role: 'assistant',
+      content: 'Hello! I\'m your AI assistant. How can I help you today?',
+      timestamp: new Date(),
+    };
+    setChatMessages([testMessage]);
   }, []);
+  
+  // Load chat history when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadChatHistory();
+      console.log('Authentication detected, loading chat history');
+    }
+  }, [isAuthenticated]);
 
   // Auto-scroll terminal and chat
   useEffect(() => {
@@ -586,7 +606,7 @@ export default function IDE() {
         }
       } else {
         // Send all other commands to the backend for execution
-        const result = await ideApi.executeTerminalCommand(command, currentPath);
+        const result = await ideApi.runTerminalCommand(command, currentPath);
         if (result.error) {
           response = `Error: ${result.error}`;
         } else {
@@ -662,9 +682,106 @@ export default function IDE() {
     }
   }, [terminalInput, executeTerminalCommand, terminalHistory, historyIndex]);
 
+  // Load chat history from server
+  const loadChatHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      console.log('Not authenticated, skipping chat history load');
+      return;
+    }
+    
+    console.log('Loading chat history...');
+    setIsLoadingHistory(true);
+    try {
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      console.log('Fetching chat history with timestamp:', timestamp);
+      const response = await fetch(`/api/chat/history?_t=${timestamp}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+      });
+
+      console.log('Chat history response status:', response.status);
+      if (!response.ok) {
+        throw new Error('Failed to load chat history');
+      }
+
+      const data = await response.json();
+      console.log('Chat history data received:', data);
+      
+      if (data.messages && data.messages.length > 0) {
+        console.log('Processing', data.messages.length, 'messages');
+        const formattedMessages: ChatMessage[] = data.messages.map((msg: any) => ({
+          id: msg.id || Date.now().toString(),
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.createdAt),
+        }));
+        
+        console.log('Setting chat messages state with formatted messages:', formattedMessages);
+        setChatMessages(formattedMessages);
+        toast({
+          title: 'Chat history loaded',
+          description: `Loaded ${formattedMessages.length} messages`,
+        });
+      } else {
+        console.log('No chat messages found in response');
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load chat history',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [isAuthenticated, toast]);
+
+  // Clear chat history
+  const clearChatHistory = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/chat/history?_t=${timestamp}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to clear chat history');
+      }
+
+      setChatMessages([]);
+      toast({
+        title: 'Chat history cleared',
+        description: 'Your chat history has been cleared',
+      });
+    } catch (error) {
+      console.error('Error clearing chat history:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to clear chat history',
+        variant: 'destructive',
+      });
+    }
+  }, [isAuthenticated, toast]);
+
   const sendChatMessage = useCallback(async (message: string) => {
     if (!message.trim()) return;
 
+    console.log('Sending chat message:', message);
+    
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -672,7 +789,13 @@ export default function IDE() {
       timestamp: new Date(),
     };
 
-    setChatMessages(prev => [...prev, userMessage]);
+    console.log('Adding user message to chat:', userMessage);
+    setChatMessages(prev => {
+      console.log('Previous chat messages:', prev);
+      const updated = [...prev, userMessage];
+      console.log('Updated chat messages with user message:', updated);
+      return updated;
+    });
     setChatInput('');
     setIsLoading(true);
 
@@ -680,6 +803,7 @@ export default function IDE() {
       const currentFileContent = selectedFile?.content || '';
       const currentFileName = selectedFile?.name || '';
       
+      console.log('Sending request to /api/ai/chat');
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
@@ -698,11 +822,13 @@ export default function IDE() {
         }),
       });
 
+      console.log('Response status:', response.status);
       if (!response.ok) {
         throw new Error('Failed to get AI response');
       }
 
       const data = await response.json();
+      console.log('Received AI response:', data);
       
       // Process response to properly format code blocks
       const assistantMessage: ChatMessage = {
@@ -712,8 +838,15 @@ export default function IDE() {
         timestamp: new Date(),
       };
 
-      setChatMessages(prev => [...prev, assistantMessage]);
+      console.log('Adding assistant message to chat:', assistantMessage);
+      setChatMessages(prev => {
+        console.log('Previous chat messages before adding assistant response:', prev);
+        const updated = [...prev, assistantMessage];
+        console.log('Updated chat messages with assistant response:', updated);
+        return updated;
+      });
     } catch (error) {
+      console.error('Error in sendChatMessage:', error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -1328,7 +1461,7 @@ export default function IDE() {
           <>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={20} minSize={15}>
-              <div className="w-full h-full bg-gray-800 border-l border-gray-700 flex flex-col">
+              <div className="w-full h-full bg-gray-800 border-l border-gray-700 flex flex-col" style={{ zIndex: 10 }}>
                 <div className="p-4 border-b border-gray-700 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold flex items-center">
@@ -1339,7 +1472,27 @@ export default function IDE() {
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        onClick={() => setChatMessages([])}
+                        onClick={() => {
+                          loadChatHistory();
+                          toast({
+                            title: 'Chat History',
+                            description: 'Your chat history has been loaded',
+                          });
+                        }}
+                        disabled={isLoadingHistory}
+                        className="text-xs hover:bg-gray-700"
+                      >
+                        {isLoadingHistory ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <History className="w-3 h-3 mr-1" />
+                        )}
+                        Show History
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={clearChatHistory}
                         className="text-xs hover:bg-gray-700"
                       >
                         <RotateCcw className="w-3 h-3 mr-1" />
@@ -1348,12 +1501,22 @@ export default function IDE() {
                     </div>
                   </div>
                 </div>
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 overflow-hidden" style={{ minHeight: '300px' }}>
                   <ScrollArea 
                     ref={chatRef}
-                    className="h-full max-h-[calc(100vh-300px)] p-4 space-y-4"
+                    className="h-full p-4 space-y-4"
                   >
-                    {chatMessages.map((message) => (
+
+                    {chatMessages.length === 0 && (
+                      <div className="flex items-center justify-center h-full text-gray-500">
+                        <div className="text-center">
+                          <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg">No messages yet</p>
+                          <p className="text-sm text-gray-600 mt-2">Start a conversation with the AI assistant</p>
+                        </div>
+                      </div>
+                    )}
+                    {chatMessages.length > 0 && chatMessages.map((message) => (
                       <motion.div
                         key={message.id}
                         className={cn(
@@ -1372,44 +1535,8 @@ export default function IDE() {
                               : 'bg-gray-700 text-gray-200'
                           )}
                         >
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight]}
-                            components={{
-                              code({node, inline = false, className, children, ...props}: {
-                                node?: any;
-                                inline?: boolean;
-                                className?: string;
-                                children?: React.ReactNode;
-                              }) {
-                                const match = /language-(\w+)/.exec(className || '');
-                                return !inline ? (
-                                  <div className="relative group">
-                                    <CopyToClipboard text={String(children).replace(/\n$/, '')}>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 hover:bg-gray-700"
-                                      >
-                                        <Copy className="w-3 h-3" />
-                                      </Button>
-                                    </CopyToClipboard>
-                                    <pre className={className}>
-                                      <code {...props}>
-                                        {children}
-                                      </code>
-                                    </pre>
-                                  </div>
-                                ) : (
-                                  <code className={className} {...props}>
-                                    {children}
-                                  </code>
-                                );
-                              }
-                            }}
-                          >
-                            {message.content}
-                          </ReactMarkdown>
+                          {/* Simple content display for debugging */}
+                          <div className="whitespace-pre-wrap">{message.content}</div>
                         </div>
                       </motion.div>
                     ))}
