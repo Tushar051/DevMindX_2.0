@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { PurchasedModel } from "../shared/types.js";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -54,7 +55,7 @@ export const insertChatSessionSchema = createInsertSchema(chatSessions).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export interface User {
-  id: number | string;
+  id: string;
   username: string;
   email: string;
   password?: string | null;
@@ -65,6 +66,13 @@ export interface User {
   googleId?: string | null;
   githubId?: string | null;
   createdAt?: Date;
+  purchasedModels?: PurchasedModel[] | null;
+  usage?: {
+    totalTokens: number;
+    totalCost: number;
+    lastReset: Date;
+    [key: string]: number | Date; // Allow for dynamic AI model token usage, and also for lastReset
+  } | null;
 }
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;

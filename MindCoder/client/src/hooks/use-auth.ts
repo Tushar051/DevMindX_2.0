@@ -38,11 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Check URL for OAuth callback or auth error
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlToken = urlParams.get('token');
-    const urlUser = urlParams.get('user');
-    const authError = urlParams.get('error');
+    // Check URL hash for OAuth callback or auth error
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const urlToken = hashParams.get('token');
+    const urlUser = hashParams.get('user');
+    const authError = hashParams.get('error');
     
     if (authError) {
       toast({

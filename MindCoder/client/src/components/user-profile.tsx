@@ -93,6 +93,7 @@ export function UserProfile() {
               variant="outline" 
               size="sm" 
               className="justify-start"
+              onClick={() => { navigate('/account'); setIsOpen(false); }}
             >
               <Settings className="h-4 w-4 mr-2" />
               Account Settings

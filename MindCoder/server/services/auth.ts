@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { storage } from '../storage.js';
+import { getStorage as getStorageInstance } from '../storage.js';
 import type { User } from '@shared/schema.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || "QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
@@ -47,6 +47,8 @@ export function getOTPExpiry(): Date {
 }
 
 export async function authenticateUser(email: string, password: string): Promise<User> {
+  const storage = await getStorageInstance(); // Await the storage promise directly here
+  console.log("Storage object in authenticateUser:", storage);
   const user = await storage.getUserByEmail(email);
   if (!user) {
     throw new Error('User not found');

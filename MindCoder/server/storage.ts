@@ -2,6 +2,7 @@ import { users, projects, chatSessions, type User, type InsertUser, type Project
 import { connectToMongoDB } from './db.js';
 import { ObjectId } from 'mongodb';
 import path from 'path';
+import { PurchasedModel } from "../shared/types.js";
 
 export interface IStorage {
   // User operations
@@ -66,7 +67,7 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser & { googleId?: string; githubId?: string; verificationToken?: string; otp?: string; otpExpiry?: Date }): Promise<User> {
-    const id = this.currentUserId++;
+    const id = String(this.currentUserId++);
     const user: User = {
       id,
       username: insertUser.username,
@@ -79,6 +80,12 @@ export class MemStorage implements IStorage {
       googleId: insertUser.googleId || null,
       githubId: insertUser.githubId || null,
       createdAt: new Date(),
+      purchasedModels: [],
+      usage: {
+        totalTokens: 0,
+        totalCost: 0,
+        lastReset: new Date(),
+      }
     };
     this.users.set(id, user);
     return user;
@@ -89,6 +96,14 @@ export class MemStorage implements IStorage {
     if (!user) throw new Error('User not found');
     
     const updatedUser = { ...user, ...updates };
+    
+    // Ensure usage.lastReset is correctly preserved if not updated or initialized
+    if (user.usage && updatedUser.usage && !updates.usage?.lastReset) {
+      updatedUser.usage.lastReset = user.usage.lastReset;
+    } else if (!updatedUser.usage) {
+      updatedUser.usage = { totalTokens: 0, totalCost: 0, lastReset: new Date() };
+    }
+
     this.users.set(id, updatedUser);
     return updatedUser;
   }
@@ -211,52 +226,123 @@ export class MemStorage implements IStorage {
     return renamedFile;
   }
 
-  async getUserFiles(userId: number, path: string = '/'): Promise<any[]> {
+  async getUserFiles(userId: number, path?: string): Promise<any[]> {
     return Array.from(this.files.values()).filter(file => 
-      file.userId === userId && file.path.startsWith(path)
+      file.userId === userId && file.path.startsWith(path || '/')
     );
   }
 }
 
 class MongoStorage implements IStorage {
   // User operations
-  async getUser(id: number): Promise<User | undefined> {
+  async getUser(id: number | string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ id });
-    return user as unknown as User | undefined;
+    const user = await db.collection('users').findOne({ _id: new ObjectId(id as string) });
+    if (!user) return undefined;
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels || [],
+      usage: user.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const user = await db.collection('users').findOne({ email });
-    return user as unknown as User | undefined;
+    if (!user) return undefined;
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels || [],
+      usage: user.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const user = await db.collection('users').findOne({ username });
-    return user as unknown as User | undefined;
+    if (!user) return undefined;
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels || [],
+      usage: user.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const user = await db.collection('users').findOne({ googleId });
-    return user as unknown as User | undefined;
+    if (!user) return undefined;
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels || [],
+      usage: user.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async getUserByGithubId(githubId: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const user = await db.collection('users').findOne({ githubId });
-    return user as unknown as User | undefined;
+    if (!user) return undefined;
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels || [],
+      usage: user.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async createUser(insertUser: InsertUser & { googleId?: string; githubId?: string; verificationToken?: string; otp?: string; otpExpiry?: Date }): Promise<User> {
     const db = await connectToMongoDB();
-    // Find max id for auto-increment
-    const lastUser = await db.collection('users').find().sort({ id: -1 }).limit(1).toArray();
-    const id = lastUser.length > 0 ? lastUser[0].id + 1 : 1;
     const user: User = {
-      id,
       username: insertUser.username,
       email: insertUser.email,
       password: insertUser.password || null,
@@ -267,26 +353,103 @@ class MongoStorage implements IStorage {
       googleId: insertUser.googleId || null,
       githubId: insertUser.githubId || null,
       createdAt: new Date(),
+      purchasedModels: [],
+      usage: {
+        totalTokens: 0,
+        totalCost: 0,
+        lastReset: new Date(),
+      },
+      id: "" // Temporary empty string, will be replaced by _id.toString()
     };
-    await db.collection('users').insertOne(user);
-    return user;
+    const result = await db.collection('users').insertOne(user);
+    // Construct the returned user object to ensure all User properties are present
+    const createdUser: User = {
+      id: result.insertedId.toString(),
+      username: user.username,
+      email: user.email,
+      password: user.password,
+      isVerified: user.isVerified,
+      verificationToken: user.verificationToken,
+      otp: user.otp,
+      otpExpiry: user.otpExpiry,
+      googleId: user.googleId,
+      githubId: user.githubId,
+      createdAt: user.createdAt,
+      purchasedModels: user.purchasedModels,
+      usage: user.usage
+    };
+    return createdUser;
   }
 
-  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+  async updateUser(id: number | string, updates: Partial<User>): Promise<User> {
     const db = await connectToMongoDB();
-    await db.collection('users').updateOne({ id }, { $set: updates });
-    const updatedUser = await db.collection('users').findOne({ id });
+    const existingUser = await db.collection('users').findOne({ _id: new ObjectId(id as string) });
+    if (!existingUser) throw new Error('User not found');
+
+    const newUpdates: Partial<User> = { ...updates };
+
+    if (updates.purchasedModels !== undefined) {
+      newUpdates.purchasedModels = updates.purchasedModels;
+    } else if (existingUser.purchasedModels) {
+      newUpdates.purchasedModels = existingUser.purchasedModels as PurchasedModel[];
+    } else {
+      newUpdates.purchasedModels = [];
+    }
+
+    if (updates.usage !== undefined) {
+      newUpdates.usage = updates.usage;
+    } else if (existingUser.usage) {
+      newUpdates.usage = existingUser.usage;
+    } else {
+      newUpdates.usage = { totalTokens: 0, totalCost: 0, lastReset: new Date() };
+    }
+
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(id as string) },
+      { $set: newUpdates }
+    );
+    const updatedUser = await db.collection('users').findOne({ _id: new ObjectId(id as string) });
     if (!updatedUser) throw new Error('User not found');
-    return updatedUser as unknown as User;
+    // Explicitly map all properties to ensure full User object is returned
+    return {
+      id: updatedUser._id.toString(),
+      username: updatedUser.username,
+      email: updatedUser.email,
+      password: updatedUser.password,
+      isVerified: updatedUser.isVerified,
+      verificationToken: updatedUser.verificationToken,
+      otp: updatedUser.otp,
+      otpExpiry: updatedUser.otpExpiry,
+      googleId: updatedUser.googleId,
+      githubId: updatedUser.githubId,
+      createdAt: updatedUser.createdAt,
+      purchasedModels: updatedUser.purchasedModels || [],
+      usage: updatedUser.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+    } as User;
   }
 
   async verifyUser(token: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const user = await db.collection('users').findOne({ verificationToken: token });
     if (user) {
-      await db.collection('users').updateOne({ id: user.id }, { $set: { isVerified: true, verificationToken: null } });
-      const verifiedUser = await db.collection('users').findOne({ id: user.id });
-      return verifiedUser as unknown as User;
+      await db.collection('users').updateOne({ _id: user._id }, { $set: { isVerified: true, verificationToken: null } });
+      const verifiedUser = await db.collection('users').findOne({ _id: user._id });
+      if (!verifiedUser) return undefined;
+      return { 
+        id: verifiedUser._id.toString(),
+        username: verifiedUser.username,
+        email: verifiedUser.email,
+        password: verifiedUser.password,
+        isVerified: verifiedUser.isVerified,
+        verificationToken: verifiedUser.verificationToken,
+        otp: verifiedUser.otp,
+        otpExpiry: verifiedUser.otpExpiry,
+        googleId: verifiedUser.googleId,
+        githubId: verifiedUser.githubId,
+        createdAt: verifiedUser.createdAt,
+        purchasedModels: verifiedUser.purchasedModels || [],
+        usage: verifiedUser.usage || { totalTokens: 0, totalCost: 0, lastReset: new Date() }
+      } as User;
     }
     return undefined;
   }
@@ -295,13 +458,32 @@ class MongoStorage implements IStorage {
   async getProject(id: number): Promise<Project | undefined> {
     const db = await connectToMongoDB();
     const project = await db.collection('projects').findOne({ id });
-    return project as unknown as Project | undefined;
+    if (!project) return undefined;
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      framework: project.framework,
+      userId: project.userId,
+      files: project.files,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    } as Project;
   }
 
   async getUserProjects(userId: number): Promise<Project[]> {
     const db = await connectToMongoDB();
     const projects = await db.collection('projects').find({ userId }).toArray();
-    return projects as unknown as Project[];
+    return projects.map(project => ({ 
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      framework: project.framework,
+      userId: project.userId,
+      files: project.files,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    })) as Project[];
   }
 
   async createProject(insertProject: InsertProject & { userId: number; files?: any }): Promise<Project> {
@@ -331,7 +513,16 @@ class MongoStorage implements IStorage {
     );
     const updatedProject = await db.collection('projects').findOne({ id });
     if (!updatedProject) throw new Error('Project not found');
-    return updatedProject as unknown as Project;
+    return {
+      id: updatedProject.id,
+      name: updatedProject.name,
+      description: updatedProject.description,
+      framework: updatedProject.framework,
+      userId: updatedProject.userId,
+      files: updatedProject.files,
+      createdAt: updatedProject.createdAt,
+      updatedAt: updatedProject.updatedAt,
+    } as Project;
   }
 
   async deleteProject(id: number): Promise<void> {
@@ -343,19 +534,39 @@ class MongoStorage implements IStorage {
   async getChatSession(id: number): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
     const session = await db.collection('chatSessions').findOne({ id });
-    return session as unknown as ChatSession | undefined;
+    if (!session) return undefined;
+    return {
+      id: session.id,
+      userId: session.userId,
+      projectId: session.projectId,
+      messages: session.messages,
+      createdAt: session.createdAt,
+    } as ChatSession;
   }
 
   async getUserChatSessions(userId: number): Promise<ChatSession[]> {
     const db = await connectToMongoDB();
     const sessions = await db.collection('chatSessions').find({ userId }).toArray();
-    return sessions as unknown as ChatSession[];
+    return sessions.map(session => ({
+      id: session.id,
+      userId: session.userId,
+      projectId: session.projectId,
+      messages: session.messages,
+      createdAt: session.createdAt,
+    })) as ChatSession[];
   }
 
   async getProjectChatSession(projectId: number): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
     const session = await db.collection('chatSessions').findOne({ projectId });
-    return session as unknown as ChatSession | undefined;
+    if (!session) return undefined;
+    return {
+      id: session.id,
+      userId: session.userId,
+      projectId: session.projectId,
+      messages: session.messages,
+      createdAt: session.createdAt,
+    } as ChatSession;
   }
 
   async createChatSession(insertSession: InsertChatSession & { userId: number }): Promise<ChatSession> {
@@ -379,7 +590,13 @@ class MongoStorage implements IStorage {
     await db.collection('chatSessions').updateOne({ id }, { $set: updates });
     const updatedSession = await db.collection('chatSessions').findOne({ id });
     if (!updatedSession) throw new Error('Chat session not found');
-    return updatedSession as unknown as ChatSession;
+    return {
+      id: updatedSession.id,
+      userId: updatedSession.userId,
+      projectId: updatedSession.projectId,
+      messages: updatedSession.messages,
+      createdAt: updatedSession.createdAt,
+    } as ChatSession;
   }
 
   // File operations
@@ -433,10 +650,12 @@ class MongoStorage implements IStorage {
   }
 }
 
-// Initialize storage with fallback to MemStorage if MongoDB fails
-let storage: IStorage;
+// Storage instance with proper initialization
+let storage: IStorage | null = null;
 
-async function initializeStorage() {
+async function initializeStorage(): Promise<IStorage> {
+  if (storage) return storage;
+  
   try {
     const db = await connectToMongoDB();
     await db.command({ ping: 1 }); // Test the connection
@@ -446,14 +665,25 @@ async function initializeStorage() {
     console.warn('Failed to connect to MongoDB, falling back to MemStorage:', error);
     storage = new MemStorage();
   }
+  
+  return storage;
 }
 
-// Initialize storage
-initializeStorage().catch(error => {
+// Function to get storage instance
+export async function getStorage(): Promise<IStorage> {
+  if (!storage) {
+    return await initializeStorage();
+  }
+  return storage;
+}
+
+// Initialize storage on module load
+const storagePromise = initializeStorage().catch(error => {
   console.error('Failed to initialize storage:', error);
   // Fallback to MemStorage if initialization fails
   storage = new MemStorage();
+  return storage;
 });
 
-export { storage };
-
+// Export a promise that resolves to the storage instance
+// export { storagePromise as storage }; // REMOVED: This export is causing issues due to direct promise use

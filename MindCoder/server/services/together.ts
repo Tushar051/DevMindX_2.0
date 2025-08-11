@@ -1,5 +1,5 @@
 import Together from 'together-ai';
-import JSON5 from 'json5'; // Install via: npm install json5
+import JSON5 from 'json5'; 
 
 if (!process.env.TOGETHER_API_KEY) {
   console.warn('TOGETHER_API_KEY is not set. AI features will not work.');

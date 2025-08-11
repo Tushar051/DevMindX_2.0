@@ -212,8 +212,9 @@ export const ideApi = {
     return response.json();
   },
 
-  getFiles: async (): Promise<any[]> => {
-    const response = await apiRequest('GET', '/api/ide/files');
+  getFiles: async (timestamp?: number): Promise<any[]> => {
+    const url = timestamp ? `/api/ide/files?_t=${timestamp}` : '/api/ide/files';
+    const response = await apiRequest('GET', url);
     return response.json();
   }
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ResizablePanel, ResizablePanelGroup, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 
@@ -47,6 +49,7 @@ import {
   Maximize2,
   Sparkles,
   Cpu,
+  Bot,
   GitBranch,
   Type,
   FileCode,
@@ -54,11 +57,15 @@ import {
   FileImage,
   FileArchive,
   History,
-  Loader2
+  Loader2,
+  HelpCircle,
+  CheckCircle,
+  Lock
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -79,14 +86,10 @@ interface FileNode {
   parentId?: string | null;
 }
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-  isCode?: boolean;
-  language?: string;
-}
+// ChatMessage interface is now imported from shared/types.ts
+
+// Import shared types
+import { AIModel, ChatMessage } from '@shared/types';
 
 interface TerminalOutput {
   id: string;
@@ -217,6 +220,7 @@ export default function IDE() {
   const { isAuthenticated, logout } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [fileTree, setFileTree] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [openFiles, setOpenFiles] = useState<FileNode[]>([]);
@@ -226,6 +230,8 @@ export default function IDE() {
   const [terminalOutput, setTerminalOutput] = useState<TerminalOutput[]>([]);
   const [terminalInput, setTerminalInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState('together');
   const [isExecuting, setIsExecuting] = useState(false);
   const [currentPath, setCurrentPath] = useState('/workspace');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -250,14 +256,63 @@ export default function IDE() {
   const chatRef = useRef<HTMLDivElement>(null);
   const terminalResizeRef = useRef<HTMLDivElement>(null);
   const terminalInputRef = useRef<HTMLInputElement>(null);
+  const location = useLocation();
 
   // Set futuristic theme by default
   useEffect(() => {
     setTheme('dark');
   }, [setTheme]);
 
-  // Initialize with empty workspace
+  // Fetch available AI models
+  const fetchAvailableModels = useCallback(async () => {
+    try {
+      const response = await fetch('/api/ai/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch AI models');
+      }
+
+      const data = await response.json();
+      // The API now returns an array of full model objects
+      const models = Array.isArray(data) ? data : data.models || [];
+      
+      // Update the models to show which ones are available based on purchase status
+      const updatedModels = models.map((model: AIModel) => ({
+        ...model,
+        available: model.id === 'together' || model.purchased
+      }));
+      
+      setAvailableModels(updatedModels);
+      
+      // Set default model if available
+      if (updatedModels.length > 0) {
+        // First try to find an available model
+        const availableModel = updatedModels.find((model: AIModel) => model.available);
+        if (availableModel) {
+          setSelectedModel(availableModel.id);
+        } else {
+          // If no models are available, default to 'together' which should always be available
+          setSelectedModel('together');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching AI models:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch available AI models',
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
+
+  // Initialize workspace and fetch files if available
   useEffect(() => {
+    // Initialize with empty workspace
     setFileTree([]);
     setSelectedFile(null);
     setOpenFiles([]);
@@ -271,7 +326,131 @@ export default function IDE() {
       timestamp: new Date(),
     };
     setChatMessages([testMessage]);
-  }, []);
+    
+    // Fetch workspace files and AI models if authenticated
+    if (isAuthenticated) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get('projectId');
+      
+      if (projectId) {
+        // If coming from project load, wait a moment for server to process
+        setTimeout(() => fetchWorkspaceFiles(), 500);
+      } else {
+        fetchWorkspaceFiles();
+      }
+      
+      // Fetch available AI models
+      fetchAvailableModels();
+    }
+  }, [isAuthenticated, location.search, fetchAvailableModels]);
+  
+  // Function to fetch workspace files
+  const fetchWorkspaceFiles = async () => {
+        try {
+          console.log('Fetching workspace files...');
+          const urlParams = new URLSearchParams(window.location.search);
+          const projectId = urlParams.get('projectId');
+          const timestamp = new Date().getTime();
+          
+          // If loading a specific project, wait for server to process
+          if (projectId) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+          const response = await ideApi.getFiles(timestamp);
+          console.log('Response from ideApi.getFiles():', response);
+          if (response && Array.isArray(response)) {
+            // Convert the flat file list to a tree structure
+            const fileTreeData = buildFileTree(response);
+            console.log('Built file tree data:', fileTreeData);
+            setFileTree(fileTreeData);
+            toast({
+              title: projectId ? "Project loaded" : "Workspace loaded",
+              description: projectId 
+                ? `Project ${projectId} files have been loaded.` 
+                : "Your workspace files have been loaded.",
+            });
+          } else {
+            console.warn('ideApi.getFiles() did not return an array:', response);
+            toast({
+              title: "Warning",
+              description: "No files found or unexpected response format.",
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching workspace files:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load workspace files.",
+            variant: "destructive",
+          });
+        }
+      };
+  
+  // Function to build file tree from flat file list
+  const buildFileTree = (files: any[]): FileNode[] => {
+        console.log('Building file tree from files:', files);
+        const tree: FileNode[] = [];
+        const map: Record<string, FileNode> = {};
+        
+        // First pass: create all nodes
+        files.forEach(file => {
+          const path = file.path;
+          // Ensure path starts with /workspace/ and remove it for relative pathing
+          const relativePath = path.startsWith('/workspace/') ? path.substring('/workspace/'.length) : path;
+          const parts = relativePath.split('/').filter(Boolean);
+          const name = parts[parts.length - 1];
+          const id = file.id || Date.now() + '-' + Math.random().toString(36).substr(2, 9); // Use file.id if available
+          
+          map[relativePath] = {
+            id,
+            name,
+            type: file.type,
+            path: relativePath,
+            content: file.content || '',
+            children: file.type === 'folder' ? [] : undefined,
+            isExpanded: false
+          };
+        });
+        
+        // Second pass: build the tree structure
+        files.forEach(file => {
+          const path = file.path;
+          const relativePath = path.startsWith('/workspace/') ? path.substring('/workspace/'.length) : path;
+          const parts = relativePath.split('/').filter(Boolean);
+          
+          if (parts.length === 1) {
+            // Root level file/folder
+            tree.push(map[relativePath]);
+          } else {
+            // Nested file/folder
+            const parentPath = parts.slice(0, parts.length - 1).join('/');
+            if (map[parentPath]) {
+              if (!map[parentPath].children) {
+                map[parentPath].children = [];
+              }
+              map[parentPath].children!.push(map[relativePath]);
+            }
+          }
+        });
+        
+        // Sort the tree for consistent display (folders first, then files, alphabetically)
+        const sortTree = (nodes: FileNode[]) => {
+          nodes.sort((a, b) => {
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+            return a.name.localeCompare(b.name);
+          });
+          nodes.forEach(node => {
+            if (node.children) {
+              sortTree(node.children);
+            }
+          });
+        };
+        sortTree(tree);
+        
+        return tree;
+      };
   
   // Load chat history when user is authenticated
   useEffect(() => {
@@ -293,6 +472,29 @@ export default function IDE() {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  // Add keyboard shortcuts for model switching
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Alt+1 through Alt+5 for switching models
+      if (e.altKey && e.key >= '1' && e.key <= '5') {
+        const index = parseInt(e.key) - 1;
+        const availableModelsList = availableModels.filter(m => m.available);
+        
+        if (index < availableModelsList.length) {
+          setSelectedModel(availableModelsList[index].id);
+          toast({
+            title: "Model Switched",
+            description: `Switched to ${availableModelsList[index].name}`,
+            duration: 2000,
+          });
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [availableModels, setSelectedModel, toast]);
 
   // Terminal resize handler
   useEffect(() => {
@@ -777,6 +979,38 @@ export default function IDE() {
     }
   }, [isAuthenticated, toast]);
 
+  // Add this function to recommend models based on task
+  const getRecommendedModel = useCallback((task: string) => {
+    const taskLower = task.toLowerCase();
+    
+    if (taskLower.includes('image') || taskLower.includes('vision')) {
+      return availableModels.find(m => m.id === 'gemini' && m.available) ? 'gemini' : 'together';
+    }
+    
+    if (taskLower.includes('debug') || taskLower.includes('fix')) {
+      return availableModels.find(m => m.id === 'chatgpt' && m.available) ? 'chatgpt' : 'together';
+    }
+    
+    if (taskLower.includes('explain') || taskLower.includes('document')) {
+      return availableModels.find(m => m.id === 'claude' && m.available) ? 'claude' : 'together';
+    }
+    
+    if (taskLower.includes('optimize') || taskLower.includes('performance')) {
+      return availableModels.find(m => m.id === 'deepseek' && m.available) ? 'deepseek' : 'together';
+    }
+    
+    // Default to the most capable available model
+    const availableModelsByComplexity = availableModels
+      .filter(m => m.available)
+      .sort((a, b) => {
+        const complexityOrder = { 'Basic': 1, 'Medium': 2, 'Complex': 3 };
+        return complexityOrder[b.complexity as keyof typeof complexityOrder] - 
+               complexityOrder[a.complexity as keyof typeof complexityOrder];
+      });
+    
+    return availableModelsByComplexity.length > 0 ? availableModelsByComplexity[0].id : 'together';
+  }, [availableModels]);
+
   const sendChatMessage = useCallback(async (message: string) => {
     if (!message.trim()) return;
 
@@ -812,7 +1046,7 @@ export default function IDE() {
         },
         body: JSON.stringify({
           message,
-          model: 'together',
+          model: selectedModel,
           chatHistory: chatMessages.slice(-5),
           projectContext: {
             currentFile: currentFileName,
@@ -857,7 +1091,7 @@ export default function IDE() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile, chatMessages, fileTree]);
+  }, [selectedFile, chatMessages, fileTree, selectedModel]);
 
   const toggleFolder = useCallback((folderId: string) => {
     const updateExpanded = (nodes: FileNode[]): FileNode[] => {
@@ -987,9 +1221,25 @@ export default function IDE() {
         openFile(firstFile);
       }
 
+      // Refresh projects list after creation
+      try {
+        const projectsResponse = await fetch('/api/projects', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+          },
+          cache: 'no-cache'
+        });
+        if (projectsResponse.ok) {
+          const projectsData = await projectsResponse.json();
+          // You might want to store this in a global state or context
+        }
+      } catch (error) {
+        console.error('Error refreshing projects:', error);
+      }
+
       toast({
         title: "Project Generated",
-        description: `${data.name} has been successfully generated.`,
+        description: `${data.name} has been successfully generated and saved.`,
       });
 
       setShowGenerateProjectModal(false);
@@ -1139,6 +1389,19 @@ export default function IDE() {
         return <File className="w-4 h-4 text-gray-400" />;
     }
   };
+
+  useEffect(() => {
+    // Check for model purchase flag
+    if (localStorage.getItem('modelPurchased') === 'true') {
+      fetchAvailableModels();
+      toast({
+        title: 'Model Unlocked',
+        description: 'Your new model is now available in the IDE!',
+        variant: 'default',
+      });
+      localStorage.removeItem('modelPurchased');
+    }
+  }, [fetchAvailableModels, toast]);
 
   if (!isAuthenticated) {
     return (
@@ -1558,26 +1821,127 @@ export default function IDE() {
                   </ScrollArea>
                 </div>
                 <div className="p-4 border-t border-gray-700 flex-shrink-0">
-                  <div className="flex space-x-2">
-                    <Input
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Ask AI for help..."
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          sendChatMessage(chatInput);
-                        }
-                      }}
-                      className="flex-1 bg-gray-700 border-gray-600 focus:border-blue-500"
-                    />
-                    <Button 
-                      onClick={() => sendChatMessage(chatInput)} 
-                      size="sm"
-                      disabled={isLoading}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Bot className="w-4 h-4 text-blue-400" />
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                      <SelectTrigger className="h-8 text-xs bg-gray-700 border-gray-600 focus:border-blue-500">
+                        <SelectValue placeholder="Select AI Model" />
+                        <div className="ml-2">
+                          <HelpCircle className="w-3 h-3 text-gray-400 hover:text-white cursor-help" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Show model comparison tooltip
+                              toast({
+                                title: "AI Model Information",
+                                description: (
+                                  <div className="text-xs space-y-1">
+                                    {availableModels.find(m => m.id === selectedModel)?.features?.map(feature => (
+                                      <div key={feature} className="flex items-center">
+                                        <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
+                                        <span>{feature}</span>
+                                      </div>
+                                    ))}
+                                    <Button 
+                                      variant="link" 
+                                      size="sm" 
+                                      className="text-blue-400 p-0 h-auto" 
+                                      onClick={() => navigate('/account')}
+                                    >
+                                      Manage subscriptions
+                                    </Button>
+                                  </div>
+                                ),
+                                duration: 5000,
+                              });
+                            }}
+                          />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-800 border-gray-700">
+                        {availableModels.map((model) => (
+                          <SelectItem 
+                            key={model.id} 
+                            value={model.id}
+                            disabled={!model.available}
+                            className={!model.available ? 'opacity-50' : ''}
+                          >
+                            <div className="flex items-center">
+                              <span className="text-white">{model.name}</span>
+                              {!model.available && !model.purchased && model.id !== 'together' && (
+                                <Lock className="ml-2 w-4 h-4 text-gray-400" />
+                              )}
+                              {model.available && model.id !== 'together' && (
+                                <Badge variant="outline" className="ml-2 text-xs bg-green-800 text-green-200 border-green-700">
+                                  Purchased
+                                </Badge>
+                              )}
+                              {model.available && model.id === 'together' && (
+                                <Badge variant="outline" className="ml-2 text-xs bg-blue-800 text-blue-200 border-blue-700">
+                                  Free
+                                </Badge>
+                              )}
+                              {!model.available && model.purchased && (
+                                <Badge variant="outline" className="ml-2 text-xs bg-yellow-800 text-yellow-200 border-yellow-700">
+                                  Purchased (API Unavailable)
+                                </Badge>
+                              )}
+                              {!model.available && !model.purchased && model.id === 'together' && (
+                                <Badge variant="outline" className="ml-2 text-xs">
+                                  Unavailable
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Quick switch: Alt+1 to Alt+{availableModels.filter(m => m.available).length}
+                    </div>
+                  </div>
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-gray-400 hover:text-white"
+                        onClick={() => {
+                          const recommendedModel = getRecommendedModel(chatInput);
+                          if (recommendedModel !== selectedModel) {
+                            setSelectedModel(recommendedModel);
+                            toast({
+                              title: "Model Recommendation",
+                              description: `Switched to ${availableModels.find(m => m.id === recommendedModel)?.name} based on your task.`,
+                              duration: 3000,
+                            });
+                          }
+                        }}
+                      >
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Best Model
+                      </Button>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Input
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Ask AI for help..."
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            sendChatMessage(chatInput);
+                          }
+                        }}
+                        className="flex-1 bg-gray-700 border-gray-600 focus:border-blue-500"
+                      />
+                      <Button 
+                        onClick={() => sendChatMessage(chatInput)} 
+                        size="sm"
+                        disabled={isLoading}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                      >
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
