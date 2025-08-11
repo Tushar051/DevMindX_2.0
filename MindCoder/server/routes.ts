@@ -463,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/projects/:id", authenticateToken, async (req: any, res) => {
     try {
       const storage = await getStorage(); // Add this line
-      const project = await storage.getProject(parseInt(req.params.id));
+      const project = await storage.getProject(req.params.id);
       if (!project || project.userId !== req.user.id) {
         return res.status(404).json({ message: "Project not found" });
       }
@@ -478,7 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Load a project's files into the IDE workspace
   app.get("/api/projects/:id/load", authenticateToken, async (req: any, res) => {
     try {
-      const projectId = parseInt(req.params.id);
+      const projectId = req.params.id; // Project ID is now a string
       const userId = req.user.id;
       
       const storage = await getStorage(); // Add this line
@@ -538,12 +538,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/projects/:id", authenticateToken, async (req: any, res) => {
     try {
       const storage = await getStorage(); // Add this line
-      const project = await storage.getProject(parseInt(req.params.id));
+      const projectId = req.params.id;
+      const project = await storage.getProject(projectId);
       if (!project || project.userId !== req.user.id) {
         return res.status(404).json({ message: "Project not found" });
       }
 
-      const updatedProject = await storage.updateProject(parseInt(req.params.id), req.body);
+      const updatedProject = await storage.updateProject(projectId, req.body);
       res.json(updatedProject);
     } catch (error) {
       console.error('Update project error:', error);
@@ -555,12 +556,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/projects/:id", authenticateToken, async (req: any, res) => {
     try {
       const storage = await getStorage(); // Add this line
-      const project = await storage.getProject(parseInt(req.params.id));
+      const projectId = req.params.id;
+      const project = await storage.getProject(projectId);
       if (!project || project.userId !== req.user.id) {
         return res.status(404).json({ message: "Project not found" });
       }
 
-      await storage.deleteProject(parseInt(req.params.id));
+      await storage.deleteProject(projectId);
       res.json({ message: "Project deleted successfully" });
     } catch (error) {
       console.error('Delete project error:', error);

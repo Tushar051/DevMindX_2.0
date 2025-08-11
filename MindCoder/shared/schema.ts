@@ -53,6 +53,12 @@ export const insertChatSessionSchema = createInsertSchema(chatSessions).pick({
   messages: true,
 });
 
+// Explicitly define InsertChatSession to use string IDs
+export interface InsertChatSession {
+  projectId?: string | null;
+  messages?: any[];
+}
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export interface User {
   id: string;
@@ -75,6 +81,20 @@ export interface User {
   } | null;
 }
 export type InsertProject = z.infer<typeof insertProjectSchema>;
-export type Project = typeof projects.$inferSelect;
-export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
-export type ChatSession = typeof chatSessions.$inferSelect;
+export type Project = { 
+  id: string; 
+  name: string; 
+  description?: string | null; 
+  framework?: string | null; 
+  userId?: string; 
+  files: any; 
+  createdAt?: Date; 
+  updatedAt?: Date; 
+};
+export interface ChatSession {
+  id: string;
+  userId: string | null;
+  projectId: string | null;
+  messages: any[];
+  createdAt?: Date;
+}

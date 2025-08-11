@@ -334,7 +334,8 @@ export default function IDE() {
       
       if (projectId) {
         // If coming from project load, wait a moment for server to process
-        setTimeout(() => fetchWorkspaceFiles(), 500);
+        // Also, trigger loading of the specific project instead of just fetching all workspace files
+        setTimeout(() => fetchWorkspaceFiles(projectId), 500); // Pass projectId to fetchWorkspaceFiles
       } else {
         fetchWorkspaceFiles();
       }
@@ -345,25 +346,45 @@ export default function IDE() {
   }, [isAuthenticated, location.search, fetchAvailableModels]);
   
   // Function to fetch workspace files
-  const fetchWorkspaceFiles = async () => {
+  const fetchWorkspaceFiles = async (projectIdToLoad?: string) => {
         try {
           console.log('Fetching workspace files...');
           const urlParams = new URLSearchParams(window.location.search);
-          const projectId = urlParams.get('projectId');
+          const projectId = projectIdToLoad || urlParams.get('projectId'); // Use passed projectId or from URL
           const timestamp = new Date().getTime();
           
-          // If loading a specific project, wait for server to process
+          // If loading a specific project, call the /api/projects/:id/load endpoint first
           if (projectId) {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log(`Attempting to load project with ID: ${projectId}`);
+            const loadProjectResponse = await fetch(`/api/projects/${projectId}/load`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+              },
+            });
+            
+            if (!loadProjectResponse.ok) {
+              throw new Error(`Failed to load project ${projectId}`);
+            }
+            await loadProjectResponse.json(); // Consume the response
+            console.log(`Project ${projectId} loaded successfully on backend.`);
           }
-          
+
+          // Fetch current workspace files after loading the project (or if no project to load)
           const response = await ideApi.getFiles(timestamp);
           console.log('Response from ideApi.getFiles():', response);
+
+          // Add console.log to inspect the raw response for debugging
+          console.log('Raw response from ideApi.getFiles:', JSON.stringify(response, null, 2));
+
           if (response && Array.isArray(response)) {
             // Convert the flat file list to a tree structure
             const fileTreeData = buildFileTree(response);
-            console.log('Built file tree data:', fileTreeData);
+
+            // Add console.log to inspect the built file tree data
+            console.log('Built file tree data (after buildFileTree):', JSON.stringify(fileTreeData, null, 2));
+            
             setFileTree(fileTreeData);
+            setCurrentPath('/workspace'); // Reset current path to root after loading new project
             toast({
               title: projectId ? "Project loaded" : "Workspace loaded",
               description: projectId 
@@ -389,68 +410,85 @@ export default function IDE() {
   
   // Function to build file tree from flat file list
   const buildFileTree = (files: any[]): FileNode[] => {
-        console.log('Building file tree from files:', files);
-        const tree: FileNode[] = [];
-        const map: Record<string, FileNode> = {};
-        
-        // First pass: create all nodes
-        files.forEach(file => {
-          const path = file.path;
-          // Ensure path starts with /workspace/ and remove it for relative pathing
-          const relativePath = path.startsWith('/workspace/') ? path.substring('/workspace/'.length) : path;
-          const parts = relativePath.split('/').filter(Boolean);
-          const name = parts[parts.length - 1];
-          const id = file.id || Date.now() + '-' + Math.random().toString(36).substr(2, 9); // Use file.id if available
-          
-          map[relativePath] = {
+    console.log('Building file tree from files:', files);
+    const tree: FileNode[] = [];
+    const newMap: Record<string, FileNode> = {}; // map will store all nodes (files and folders) by their full relative path
+
+    // First pass: create all nodes (files and folders) with their full paths
+    files.forEach(file => {
+      const fullPath = file.path;
+      // Ensure path starts with /workspace/ and remove it for relative pathing
+      const normalizedPath = fullPath.startsWith('/workspace/') ? fullPath.substring('/workspace/'.length) : fullPath;
+      const parts = normalizedPath.split('/').filter(Boolean);
+
+      let currentDirectoryPath = '';
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isLastPart = (i === parts.length - 1);
+        const nodePath = currentDirectoryPath ? `${currentDirectoryPath}/${part}` : part;
+
+        if (isLastPart && file.type === 'file') {
+          // This is the actual file
+          const id = String(file._id) || Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
+          newMap[nodePath] = {
             id,
-            name,
-            type: file.type,
-            path: relativePath,
+            name: part,
+            type: 'file',
+            path: normalizedPath, // Store the normalized relative path
             content: file.content || '',
-            children: file.type === 'folder' ? [] : undefined,
             isExpanded: false
           };
-        });
-        
-        // Second pass: build the tree structure
-        files.forEach(file => {
-          const path = file.path;
-          const relativePath = path.startsWith('/workspace/') ? path.substring('/workspace/'.length) : path;
-          const parts = relativePath.split('/').filter(Boolean);
-          
-          if (parts.length === 1) {
-            // Root level file/folder
-            tree.push(map[relativePath]);
-          } else {
-            // Nested file/folder
-            const parentPath = parts.slice(0, parts.length - 1).join('/');
-            if (map[parentPath]) {
-              if (!map[parentPath].children) {
-                map[parentPath].children = [];
-              }
-              map[parentPath].children!.push(map[relativePath]);
-            }
+        } else {
+          // This is a folder (either an intermediate folder or a top-level folder)
+          if (!newMap[nodePath]) {
+            const id = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9); // Generate a new ID for the folder
+            newMap[nodePath] = {
+              id,
+              name: part,
+              type: 'folder',
+              path: nodePath, // Store the normalized relative path for the folder
+              children: [],
+              isExpanded: false // Start collapsed
+            };
           }
-        });
-        
-        // Sort the tree for consistent display (folders first, then files, alphabetically)
-        const sortTree = (nodes: FileNode[]) => {
-          nodes.sort((a, b) => {
-            if (a.type === 'folder' && b.type !== 'folder') return -1;
-            if (a.type !== 'folder' && b.type === 'folder') return 1;
-            return a.name.localeCompare(b.name);
-          });
-          nodes.forEach(node => {
-            if (node.children) {
-              sortTree(node.children);
-            }
-          });
-        };
-        sortTree(tree);
-        
-        return tree;
-      };
+        }
+        currentDirectoryPath = nodePath;
+      }
+    });
+
+    // Second pass: build the tree structure
+    Object.values(newMap).forEach(node => {
+      const parts = node.path.split('/').filter(Boolean);
+      if (parts.length === 1) {
+        // Root level file/folder
+        tree.push(node);
+      } else {
+        // Nested file/folder, find its parent
+        const parentPath = parts.slice(0, parts.length - 1).join('/');
+        if (newMap[parentPath] && newMap[parentPath].type === 'folder') {
+          newMap[parentPath].children = newMap[parentPath].children || [];
+          newMap[parentPath].children!.push(node);
+        }
+      }
+    });
+
+    // Sort the tree for consistent display (folders first, then files, alphabetically)
+    const sortTree = (nodes: FileNode[]) => {
+      nodes.sort((a, b) => {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+        return a.name.localeCompare(b.name);
+      });
+      nodes.forEach(node => {
+        if (node.children) {
+          sortTree(node.children);
+        }
+      });
+    };
+    sortTree(tree);
+
+    return tree;
+  };
   
   // Load chat history when user is authenticated
   useEffect(() => {

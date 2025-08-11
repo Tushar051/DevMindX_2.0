@@ -245,7 +245,7 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
         complexity: 'Medium' as 'Basic' | 'Medium' | 'Complex',
         tokensPerMonth: 50000,
         pricePerToken: 0.002,
-        price: 9.99,
+        price: 749, // Updated price to match landing page (INR)
         features: [
           'Code Generation',
           'Image Analysis',
@@ -266,7 +266,7 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
         complexity: 'Complex' as 'Basic' | 'Medium' | 'Complex',
         tokensPerMonth: 100000,
         pricePerToken: 0.005,
-        price: 19.99,
+        price: 1499, // Updated price to match landing page (INR)
         features: [
           'Natural Language',
           'Code Completion',
@@ -287,7 +287,7 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
         complexity: 'Complex' as 'Basic' | 'Medium' | 'Complex',
         tokensPerMonth: 100000,
         pricePerToken: 0.005,
-        price: 19.99,
+        price: 1299, // Updated price to match landing page (INR)
         features: [
           'Long Context',
           'Code Understanding',
@@ -308,7 +308,7 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
         complexity: 'Medium' as 'Basic' | 'Medium' | 'Complex',
         tokensPerMonth: 50000,
         pricePerToken: 0.003,
-        price: 14.99,
+        price: 1125, // Updated price to match landing page (INR)
         features: [
           'Code Generation',
           'Debugging',

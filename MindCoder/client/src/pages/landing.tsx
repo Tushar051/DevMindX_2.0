@@ -197,13 +197,30 @@ export default function Landing() {
     setPurchasingModel(selectedModel);
     setPaymentStatus('processing');
     
+    // Determine the number of months for the subscription (defaulting to 1 for simplicity for now)
+    const months = 1; 
+
+    // Prepare payment details based on the selected method
+    let paymentDetails: any = {};
+    if (paymentMethod === 'credit' || paymentMethod === 'debit') {
+      paymentDetails = {
+        cardLast4: cardNumber.replace(/\s/g, '').slice(-4),
+        cardExpiry: cardExpiry,
+        cardholderName: cardName
+      };
+    } else if (paymentMethod === 'upi') {
+      paymentDetails = {
+        upiId: upiId
+      };
+    }
+
     // Simulate payment gateway integration
     try {
       // In a real implementation, this would be a call to a payment gateway API
       await new Promise((resolve, reject) => {
         setTimeout(() => {
-          // Simulate 90% success rate for demo purposes
-          if (Math.random() < 0.9) {
+          // Simulate 100% success rate for demo purposes
+          if (true) { 
             resolve({
               transactionId: 'txn_' + Math.random().toString(36).substring(2, 15),
               status: 'success'
@@ -221,7 +238,12 @@ export default function Landing() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`
         },
-        body: JSON.stringify({ modelId: selectedModel })
+        body: JSON.stringify({ 
+          modelId: selectedModel,
+          paymentMethod: paymentMethod,
+          paymentDetails: paymentDetails,
+          months: months
+        })
       });
 
       if (!purchaseRes.ok) {
@@ -229,41 +251,6 @@ export default function Landing() {
       }
 
       const data = await purchaseRes.json();
-      
-      // In a real implementation, you would make an actual API call like this:
-      /*
-      const response = await fetch('/api/ai/purchase', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
-        },
-        body: JSON.stringify({ 
-          modelId: selectedModel,
-          paymentMethod: paymentMethod,
-          // Include masked payment details for record-keeping
-          paymentDetails: paymentMethod === 'upi' ? 
-            { upiId: upiId } : 
-            { 
-              cardLast4: cardNumber.replace(/\s/g, '').slice(-4),
-              cardExpiry: cardExpiry,
-              cardholderName: cardName 
-            }
-        }),
-      });
-      
-      // Check if response is HTML instead of JSON (common server error)
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('Server returned HTML instead of JSON. The API endpoint may not exist.');
-      }
-      
-      if (!response.ok) {
-        throw new Error('Failed to register purchase with server');
-      }
-      
-      const data = await response.json();
-      */
       
       // Update payment status to success
       setPaymentStatus('success');

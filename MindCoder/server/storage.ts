@@ -16,31 +16,31 @@ export interface IStorage {
   verifyUser(token: string): Promise<User | undefined>;
 
   // Project operations
-  getProject(id: number): Promise<Project | undefined>;
-  getUserProjects(userId: number): Promise<Project[]>;
-  createProject(project: InsertProject & { userId: number; files?: any }): Promise<Project>;
-  updateProject(id: number, updates: Partial<Project>): Promise<Project>;
-  deleteProject(id: number): Promise<void>;
+  getProject(id: string): Promise<Project | undefined>;
+  getUserProjects(userId: string): Promise<Project[]>;
+  createProject(project: InsertProject & { userId: string; files?: any }): Promise<Project>;
+  updateProject(id: string, updates: Partial<Project>): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
 
   // Chat operations
-  getChatSession(id: number): Promise<ChatSession | undefined>;
-  getUserChatSessions(userId: number): Promise<ChatSession[]>;
-  getProjectChatSession(projectId: number): Promise<ChatSession | undefined>;
-  createChatSession(session: InsertChatSession & { userId: number }): Promise<ChatSession>;
-  updateChatSession(id: number, updates: Partial<ChatSession>): Promise<ChatSession>;
+  getChatSession(id: string): Promise<ChatSession | undefined>;
+  getUserChatSessions(userId: string): Promise<ChatSession[]>;
+  getProjectChatSession(projectId: string): Promise<ChatSession | undefined>;
+  createChatSession(session: InsertChatSession & { userId: string }): Promise<ChatSession>;
+  updateChatSession(id: string, updates: Partial<ChatSession>): Promise<ChatSession>;
 
   // File operations for IDE
-  createFile(file: { userId: number; path: string; content?: string; type: 'file' | 'folder' }): Promise<any>;
+  createFile(file: { userId: string; path: string; content?: string; type: 'file' | 'folder' }): Promise<any>;
   updateFile(path: string, updates: { content?: string }): Promise<any>;
   deleteFile(path: string): Promise<void>;
   renameFile(oldPath: string, newPath: string): Promise<any>;
-  getUserFiles(userId: number, path?: string): Promise<any[]>;
+  getUserFiles(userId: string, path?: string): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string | number, User> = new Map();
-  private projects: Map<number, Project> = new Map();
-  private chatSessions: Map<number, ChatSession> = new Map();
+  private projects: Map<string, Project> = new Map();
+  private chatSessions: Map<string, ChatSession> = new Map();
   private files: Map<string, any> = new Map();
   private currentUserId = 1;
   private currentProjectId = 1;
@@ -117,16 +117,16 @@ export class MemStorage implements IStorage {
     return undefined;
   }
 
-  async getProject(id: number): Promise<Project | undefined> {
+  async getProject(id: string): Promise<Project | undefined> {
     return this.projects.get(id);
   }
 
-  async getUserProjects(userId: number): Promise<Project[]> {
+  async getUserProjects(userId: string): Promise<Project[]> {
     return Array.from(this.projects.values()).filter(project => project.userId === userId);
   }
 
-  async createProject(insertProject: InsertProject & { userId: number; files?: any }): Promise<Project> {
-    const id = this.currentProjectId++;
+  async createProject(insertProject: InsertProject & { userId: string; files?: any }): Promise<Project> {
+    const id = String(this.currentProjectId++);
     const project: Project = {
       id,
       name: insertProject.name,
@@ -141,7 +141,7 @@ export class MemStorage implements IStorage {
     return project;
   }
 
-  async updateProject(id: number, updates: Partial<Project>): Promise<Project> {
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
     const project = this.projects.get(id);
     if (!project) throw new Error('Project not found');
     
@@ -150,24 +150,24 @@ export class MemStorage implements IStorage {
     return updatedProject;
   }
 
-  async deleteProject(id: number): Promise<void> {
+  async deleteProject(id: string): Promise<void> {
     this.projects.delete(id);
   }
 
-  async getChatSession(id: number): Promise<ChatSession | undefined> {
+  async getChatSession(id: string): Promise<ChatSession | undefined> {
     return this.chatSessions.get(id);
   }
 
-  async getUserChatSessions(userId: number): Promise<ChatSession[]> {
+  async getUserChatSessions(userId: string): Promise<ChatSession[]> {
     return Array.from(this.chatSessions.values()).filter(session => session.userId === userId);
   }
 
-  async getProjectChatSession(projectId: number): Promise<ChatSession | undefined> {
+  async getProjectChatSession(projectId: string): Promise<ChatSession | undefined> {
     return Array.from(this.chatSessions.values()).find(session => session.projectId === projectId);
   }
 
-  async createChatSession(insertSession: InsertChatSession & { userId: number }): Promise<ChatSession> {
-    const id = this.currentChatId++;
+  async createChatSession(insertSession: InsertChatSession & { userId: string }): Promise<ChatSession> {
+    const id = String(this.currentChatId++);
     const session: ChatSession = {
       id,
       userId: insertSession.userId,
@@ -179,7 +179,7 @@ export class MemStorage implements IStorage {
     return session;
   }
 
-  async updateChatSession(id: number, updates: Partial<ChatSession>): Promise<ChatSession> {
+  async updateChatSession(id: string, updates: Partial<ChatSession>): Promise<ChatSession> {
     const session = this.chatSessions.get(id);
     if (!session) throw new Error('Chat session not found');
     
@@ -189,7 +189,7 @@ export class MemStorage implements IStorage {
   }
 
   // File operations
-  async createFile(file: { userId: number; path: string; content?: string; type: 'file' | 'folder' }): Promise<any> {
+  async createFile(file: { userId: string; path: string; content?: string; type: 'file' | 'folder' }): Promise<any> {
     const fileRecord = {
       id: Date.now().toString(),
       userId: file.userId,
@@ -226,7 +226,7 @@ export class MemStorage implements IStorage {
     return renamedFile;
   }
 
-  async getUserFiles(userId: number, path?: string): Promise<any[]> {
+  async getUserFiles(userId: string, path?: string): Promise<any[]> {
     return Array.from(this.files.values()).filter(file => 
       file.userId === userId && file.path.startsWith(path || '/')
     );
@@ -455,164 +455,187 @@ class MongoStorage implements IStorage {
   }
 
   // Project operations
-  async getProject(id: number): Promise<Project | undefined> {
+  async getProject(id: string): Promise<Project | undefined> {
     const db = await connectToMongoDB();
-    const project = await db.collection('projects').findOne({ id });
+    // Assuming project ID is stored as _id in MongoDB for projects collection
+    const project = await db.collection('projects').findOne({ _id: new ObjectId(id) });
     if (!project) return undefined;
     return {
-      id: project.id,
+      id: project._id.toString(),
       name: project.name,
       description: project.description,
       framework: project.framework,
-      userId: project.userId,
+      userId: project.userId.toString(),
       files: project.files,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     } as Project;
   }
 
-  async getUserProjects(userId: number): Promise<Project[]> {
+  async getUserProjects(userId: string): Promise<Project[]> {
     const db = await connectToMongoDB();
-    const projects = await db.collection('projects').find({ userId }).toArray();
+    const projects = await db.collection('projects').find({ userId: new ObjectId(userId) }).toArray();
     return projects.map(project => ({ 
-      id: project.id,
+      id: project._id.toString(),
       name: project.name,
       description: project.description,
       framework: project.framework,
-      userId: project.userId,
+      userId: project.userId.toString(),
       files: project.files,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     })) as Project[];
   }
 
-  async createProject(insertProject: InsertProject & { userId: number; files?: any }): Promise<Project> {
+  async createProject(insertProject: InsertProject & { userId: string; files?: any }): Promise<Project> {
     const db = await connectToMongoDB();
-    // Find max id for auto-increment
-    const lastProject = await db.collection('projects').find().sort({ id: -1 }).limit(1).toArray();
-    const id = lastProject.length > 0 ? lastProject[0].id + 1 : 1;
-    const project: Project = {
-      id,
+    // Let MongoDB generate _id, then use it as the project's ID
+    const projectToInsert = {
       name: insertProject.name,
       description: insertProject.description || null,
       framework: insertProject.framework,
-      userId: insertProject.userId,
+      userId: new ObjectId(insertProject.userId), // Store userId as ObjectId
       files: insertProject.files || {},
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.collection('projects').insertOne(project);
-    return project;
+    const result = await db.collection('projects').insertOne(projectToInsert);
+    const createdProject: Project = {
+      id: result.insertedId.toString(),
+      name: projectToInsert.name,
+      description: projectToInsert.description,
+      framework: projectToInsert.framework,
+      userId: insertProject.userId, // Keep original string userId for the returned object
+      files: projectToInsert.files,
+      createdAt: projectToInsert.createdAt,
+      updatedAt: projectToInsert.updatedAt,
+    };
+    return createdProject;
   }
 
-  async updateProject(id: number, updates: Partial<Project>): Promise<Project> {
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
     const db = await connectToMongoDB();
+    const updateDoc: any = { ...updates, updatedAt: new Date() };
+    // Convert userId to ObjectId if it's being updated
+    if (updateDoc.userId) {
+      updateDoc.userId = new ObjectId(updateDoc.userId);
+    }
+
     await db.collection('projects').updateOne(
-      { id },
-      { $set: { ...updates, updatedAt: new Date() } }
+      { _id: new ObjectId(id) },
+      { $set: updateDoc }
     );
-    const updatedProject = await db.collection('projects').findOne({ id });
+    const updatedProject = await db.collection('projects').findOne({ _id: new ObjectId(id) });
     if (!updatedProject) throw new Error('Project not found');
     return {
-      id: updatedProject.id,
+      id: updatedProject._id.toString(),
       name: updatedProject.name,
       description: updatedProject.description,
       framework: updatedProject.framework,
-      userId: updatedProject.userId,
+      userId: updatedProject.userId.toString(),
       files: updatedProject.files,
       createdAt: updatedProject.createdAt,
       updatedAt: updatedProject.updatedAt,
     } as Project;
   }
 
-  async deleteProject(id: number): Promise<void> {
+  async deleteProject(id: string): Promise<void> {
     const db = await connectToMongoDB();
-    await db.collection('projects').deleteOne({ id });
+    await db.collection('projects').deleteOne({ _id: new ObjectId(id) });
   }
 
   // Chat operations
-  async getChatSession(id: number): Promise<ChatSession | undefined> {
+  async getChatSession(id: string): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
-    const session = await db.collection('chatSessions').findOne({ id });
+    // Assuming chat session ID is stored as _id
+    const session = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) });
     if (!session) return undefined;
     return {
-      id: session.id,
-      userId: session.userId,
-      projectId: session.projectId,
+      id: session._id.toString(),
+      userId: session.userId ? session.userId.toString() : null,
+      projectId: session.projectId ? session.projectId.toString() : null,
       messages: session.messages,
       createdAt: session.createdAt,
     } as ChatSession;
   }
 
-  async getUserChatSessions(userId: number): Promise<ChatSession[]> {
+  async getUserChatSessions(userId: string): Promise<ChatSession[]> {
     const db = await connectToMongoDB();
-    const sessions = await db.collection('chatSessions').find({ userId }).toArray();
+    // Assuming userId is stored as ObjectId in chatSessions
+    const sessions = await db.collection('chatSessions').find({ userId: new ObjectId(userId) }).toArray();
     return sessions.map(session => ({
-      id: session.id,
-      userId: session.userId,
-      projectId: session.projectId,
+      id: session._id.toString(),
+      userId: session.userId ? session.userId.toString() : null,
+      projectId: session.projectId ? session.projectId.toString() : null,
       messages: session.messages,
       createdAt: session.createdAt,
     })) as ChatSession[];
   }
 
-  async getProjectChatSession(projectId: number): Promise<ChatSession | undefined> {
+  async getProjectChatSession(projectId: string): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
-    const session = await db.collection('chatSessions').findOne({ projectId });
+    // Assuming projectId is stored as ObjectId in chatSessions
+    const session = await db.collection('chatSessions').findOne({ projectId: new ObjectId(projectId) });
     if (!session) return undefined;
     return {
-      id: session.id,
-      userId: session.userId,
-      projectId: session.projectId,
+      id: session._id.toString(),
+      userId: session.userId ? session.userId.toString() : null,
+      projectId: session.projectId ? session.projectId.toString() : null,
       messages: session.messages,
       createdAt: session.createdAt,
     } as ChatSession;
   }
 
-  async createChatSession(insertSession: InsertChatSession & { userId: number }): Promise<ChatSession> {
+  async createChatSession(insertSession: InsertChatSession & { userId: string }): Promise<ChatSession> {
     const db = await connectToMongoDB();
-    // Find max id for auto-increment
-    const lastSession = await db.collection('chatSessions').find().sort({ id: -1 }).limit(1).toArray();
-    const id = lastSession.length > 0 ? lastSession[0].id + 1 : 1;
-    const session: ChatSession = {
-      id,
-      userId: insertSession.userId,
-      projectId: insertSession.projectId || null,
+    const sessionToInsert = {
+      userId: new ObjectId(insertSession.userId), // Store userId as ObjectId
+      projectId: insertSession.projectId ? new ObjectId(insertSession.projectId) : null,
       messages: insertSession.messages || [],
       createdAt: new Date(),
     };
-    await db.collection('chatSessions').insertOne(session);
-    return session;
+    const result = await db.collection('chatSessions').insertOne(sessionToInsert);
+    const createdSession: ChatSession = {
+      id: result.insertedId.toString(),
+      userId: insertSession.userId, // Keep original userId type for returned object
+      projectId: insertSession.projectId || null,
+      messages: sessionToInsert.messages,
+      createdAt: sessionToInsert.createdAt,
+    };
+    return createdSession;
   }
 
-  async updateChatSession(id: number, updates: Partial<ChatSession>): Promise<ChatSession> {
+  async updateChatSession(id: string, updates: Partial<ChatSession>): Promise<ChatSession> {
     const db = await connectToMongoDB();
-    await db.collection('chatSessions').updateOne({ id }, { $set: updates });
-    const updatedSession = await db.collection('chatSessions').findOne({ id });
+    const updateDoc: any = { ...updates };
+    if (updateDoc.userId) updateDoc.userId = new ObjectId(updateDoc.userId);
+    if (updateDoc.projectId) updateDoc.projectId = new ObjectId(updateDoc.projectId);
+
+    await db.collection('chatSessions').updateOne({ _id: new ObjectId(id) }, { $set: updateDoc });
+    const updatedSession = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) });
     if (!updatedSession) throw new Error('Chat session not found');
     return {
-      id: updatedSession.id,
-      userId: updatedSession.userId,
-      projectId: updatedSession.projectId,
+      id: updatedSession._id.toString(),
+      userId: updatedSession.userId ? updatedSession.userId.toString() : null,
+      projectId: updatedSession.projectId ? updatedSession.projectId.toString() : null,
       messages: updatedSession.messages,
       createdAt: updatedSession.createdAt,
     } as ChatSession;
   }
 
   // File operations
-  async createFile(file: { userId: number; path: string; content?: string; type: 'file' | 'folder' }): Promise<any> {
+  async createFile(file: { userId: string; path: string; content?: string; type: 'file' | 'folder' }): Promise<any> {
     const db = await connectToMongoDB();
     const fileRecord = {
-      id: Date.now().toString(),
-      userId: file.userId,
+      userId: new ObjectId(file.userId), // Store userId as ObjectId
       path: file.path,
       content: file.content || '',
       type: file.type,
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    await db.collection('files').insertOne(fileRecord);
-    return fileRecord;
+    const result = await db.collection('files').insertOne(fileRecord);
+    return { ...fileRecord, id: result.insertedId.toString() };
   }
 
   async updateFile(path: string, updates: { content?: string }): Promise<any> {
@@ -642,10 +665,10 @@ class MongoStorage implements IStorage {
     return renamedFile;
   }
 
-  async getUserFiles(userId: number, path: string = '/'): Promise<any[]> {
+  async getUserFiles(userId: string, path: string = '/'): Promise<any[]> {
     const db = await connectToMongoDB();
     return await db.collection('files')
-      .find({ userId, path: { $regex: `^${path}` } })
+      .find({ userId: new ObjectId(userId), path: { $regex: `^${path}` } })
       .toArray();
   }
 }

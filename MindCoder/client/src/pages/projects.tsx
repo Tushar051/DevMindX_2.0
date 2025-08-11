@@ -10,11 +10,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Folder, Code, ArrowRight, Search, Plus, Trash2, Download, FolderOpen } from 'lucide-react';
 
 interface Project {
-  id: number;
+  id: string;
   name: string;
   description: string;
   framework?: string;
-  userId: number;
+  userId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,7 +27,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -65,7 +65,7 @@ export default function Projects() {
     }
   };
 
-  const handleLoadProject = async (projectId: number) => {
+  const handleLoadProject = async (projectId: string) => {
     try {
       const response = await fetch(`/api/projects/${projectId}/load`, {
         headers: {
@@ -96,7 +96,7 @@ export default function Projects() {
     }
   };
 
-  const handleDeleteProject = async (projectId: number) => {
+  const handleDeleteProject = async (projectId: string) => {
     try {
       setIsDeleting(projectId);
       const response = await fetch(`/api/projects/${projectId}`, {
