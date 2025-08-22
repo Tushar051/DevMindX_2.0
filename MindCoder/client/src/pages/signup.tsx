@@ -119,12 +119,23 @@ export function SignupPage() {
       }
 
       login(data.token, data.user);
-      navigate('/ide');
       
-      toast({
-        title: "Welcome to DevMindX!",
-        description: "Your account has been verified successfully.",
-      });
+      // Check if there's a pending collaboration invite
+      const pendingInvite = localStorage.getItem('pendingCollaborationInvite');
+      if (pendingInvite) {
+        localStorage.removeItem('pendingCollaborationInvite');
+        navigate('/ide');
+        toast({
+          title: "Welcome to DevMindX!",
+          description: "Your account has been verified successfully. You can now join the collaboration session.",
+        });
+      } else {
+        navigate('/ide');
+        toast({
+          title: "Welcome to DevMindX!",
+          description: "Your account has been verified successfully.",
+        });
+      }
     } catch (error) {
       toast({
         title: "Verification Error",
@@ -170,11 +181,12 @@ export function SignupPage() {
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
     try {
+      // Direct redirect to OAuth endpoint
       window.location.href = `/api/auth/${provider}`;
     } catch (error) {
       toast({
         title: "OAuth Error", 
-        description: `Failed to start ${provider} login process.`, 
+        description: `Failed to start ${provider} login process. Please check your internet connection.`, 
         variant: "destructive",
       });
     }

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from 'http';
 import { registerRoutes } from './routes.js';
 import { setupVite, serveStatic, log } from "./vite.js";
 import { connectToMongoDB } from './db.js';
@@ -56,7 +57,7 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
 })();
 
 (async () => {
-  const server = await registerRoutes(app);
+  await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -66,20 +67,25 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
     throw err;
   });
 
+  // Create HTTP server
+  const httpServer = createServer(app);
+  
+  // Initialize collaboration service with WebSocket server
+  // collaborationService.initialize(httpServer);
+
+  const port = parseInt(process.env.PORT || '5000', 10);
+  
+  // Start the HTTP server first
+  httpServer.listen(port, '0.0.0.0', () => {
+    log(`serving on port ${port}`);
+  });
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
-    const server = app.listen(); // Create server instance first
-    await setupVite(app, server);
+    await setupVite(app, httpServer);
   } else {
     serveStatic(app);
   }
-
-  
-
-  const port = parseInt(process.env.PORT || '5000', 10);
-  app.listen(port, '0.0.0.0', () => {
-    log(`serving on port ${port}`);
-  });
 })();

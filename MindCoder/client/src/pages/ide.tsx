@@ -12,18 +12,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 
-import { 
-  Folder, 
-  File, 
-  Plus, 
-  Trash2, 
-  Upload, 
-  Download, 
-  Play, 
-  Terminal, 
-  MessageSquare, 
-  Send, 
-  Settings, 
+import {
+  Folder,
+  File,
+  Plus,
+  Trash2,
+  Upload,
+  Download,
+  Play,
+  Terminal,
+  MessageSquare,
+  Send,
+  Settings,
   Save,
   FolderOpen,
   FileText,
@@ -73,6 +73,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { cn, getLanguageFromFileName } from '@/lib/utils';
 import { ideApi } from '@/lib/api';
+import CollaborationButton from '@/components/CollaborationButton';
 
 // Types
 interface FileNode {
@@ -89,13 +90,14 @@ interface FileNode {
 // ChatMessage interface is now imported from shared/types.ts
 
 // Import shared types
-import { AIModel, ChatMessage } from '@shared/types';
+import { AIModel, ChatMessage, FileChange, Diagnostic } from '@shared/types';
 
 interface TerminalOutput {
   id: string;
-  type: 'input' | 'output' | 'error';
+  type: 'input' | 'output' | 'error' | 'diagnostic' | 'prompt';
   content: string;
   timestamp: Date;
+  sessionId?: string;
 }
 
 interface Boilerplate {
@@ -251,6 +253,11 @@ export default function IDE() {
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]); // New state for diagnostics
+  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
+  const [isWaitingForInput, setIsWaitingForInput] = useState(false);
+  const [currentCommand, setCurrentCommand] = useState<string>('');
+  const [terminalInputMode, setTerminalInputMode] = useState<'command' | 'input'>('command');
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -280,15 +287,15 @@ export default function IDE() {
       const data = await response.json();
       // The API now returns an array of full model objects
       const models = Array.isArray(data) ? data : data.models || [];
-      
+
       // Update the models to show which ones are available based on purchase status
       const updatedModels = models.map((model: AIModel) => ({
         ...model,
         available: model.id === 'together' || model.purchased
       }));
-      
+
       setAvailableModels(updatedModels);
-      
+
       // Set default model if available
       if (updatedModels.length > 0) {
         // First try to find an available model
@@ -317,7 +324,7 @@ export default function IDE() {
     setSelectedFile(null);
     setOpenFiles([]);
     setActiveTab('');
-    
+
     // Add a test message to the chat
     const testMessage: ChatMessage = {
       id: 'test-message',
@@ -326,12 +333,12 @@ export default function IDE() {
       timestamp: new Date(),
     };
     setChatMessages([testMessage]);
-    
+
     // Fetch workspace files and AI models if authenticated
     if (isAuthenticated) {
       const urlParams = new URLSearchParams(window.location.search);
       const projectId = urlParams.get('projectId');
-      
+
       if (projectId) {
         // If coming from project load, wait a moment for server to process
         // Also, trigger loading of the specific project instead of just fetching all workspace files
@@ -339,75 +346,75 @@ export default function IDE() {
       } else {
         fetchWorkspaceFiles();
       }
-      
+
       // Fetch available AI models
       fetchAvailableModels();
     }
   }, [isAuthenticated, location.search, fetchAvailableModels]);
-  
+
   // Function to fetch workspace files
   const fetchWorkspaceFiles = async (projectIdToLoad?: string) => {
-        try {
-          console.log('Fetching workspace files...');
-          const urlParams = new URLSearchParams(window.location.search);
-          const projectId = projectIdToLoad || urlParams.get('projectId'); // Use passed projectId or from URL
-          const timestamp = new Date().getTime();
-          
-          // If loading a specific project, call the /api/projects/:id/load endpoint first
-          if (projectId) {
-            console.log(`Attempting to load project with ID: ${projectId}`);
-            const loadProjectResponse = await fetch(`/api/projects/${projectId}/load`, {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
-              },
-            });
-            
-            if (!loadProjectResponse.ok) {
-              throw new Error(`Failed to load project ${projectId}`);
-            }
-            await loadProjectResponse.json(); // Consume the response
-            console.log(`Project ${projectId} loaded successfully on backend.`);
-          }
+    try {
+      console.log('Fetching workspace files...');
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = projectIdToLoad || urlParams.get('projectId'); // Use passed projectId or from URL
+      const timestamp = new Date().getTime();
 
-          // Fetch current workspace files after loading the project (or if no project to load)
-          const response = await ideApi.getFiles(timestamp);
-          console.log('Response from ideApi.getFiles():', response);
+      // If loading a specific project, call the /api/projects/:id/load endpoint first
+      if (projectId) {
+        console.log(`Attempting to load project with ID: ${projectId}`);
+        const loadProjectResponse = await fetch(`/api/projects/${projectId}/load`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+          },
+        });
 
-          // Add console.log to inspect the raw response for debugging
-          console.log('Raw response from ideApi.getFiles:', JSON.stringify(response, null, 2));
-
-          if (response && Array.isArray(response)) {
-            // Convert the flat file list to a tree structure
-            const fileTreeData = buildFileTree(response);
-
-            // Add console.log to inspect the built file tree data
-            console.log('Built file tree data (after buildFileTree):', JSON.stringify(fileTreeData, null, 2));
-            
-            setFileTree(fileTreeData);
-            setCurrentPath('/workspace'); // Reset current path to root after loading new project
-            toast({
-              title: projectId ? "Project loaded" : "Workspace loaded",
-              description: projectId 
-                ? `Project ${projectId} files have been loaded.` 
-                : "Your workspace files have been loaded.",
-            });
-          } else {
-            console.warn('ideApi.getFiles() did not return an array:', response);
-            toast({
-              title: "Warning",
-              description: "No files found or unexpected response format.",
-            });
-          }
-        } catch (error) {
-          console.error('Error fetching workspace files:', error);
-          toast({
-            title: "Error",
-            description: "Failed to load workspace files.",
-            variant: "destructive",
-          });
+        if (!loadProjectResponse.ok) {
+          throw new Error(`Failed to load project ${projectId}`);
         }
-      };
-  
+        await loadProjectResponse.json(); // Consume the response
+        console.log(`Project ${projectId} loaded successfully on backend.`);
+      }
+
+      // Fetch current workspace files after loading the project (or if no project to load)
+      const response = await ideApi.getFiles(timestamp);
+      console.log('Response from ideApi.getFiles():', response);
+
+      // Add console.log to inspect the raw response for debugging
+      console.log('Raw response from ideApi.getFiles:', JSON.stringify(response, null, 2));
+
+      if (response && Array.isArray(response)) {
+        // Convert the flat file list to a tree structure
+        const fileTreeData = buildFileTree(response);
+
+        // Add console.log to inspect the built file tree data
+        console.log('Built file tree data (after buildFileTree):', JSON.stringify(fileTreeData, null, 2));
+
+        setFileTree(fileTreeData);
+        setCurrentPath('/workspace'); // Reset current path to root after loading new project
+        toast({
+          title: projectId ? "Project loaded" : "Workspace loaded",
+          description: projectId
+            ? `Project ${projectId} files have been loaded.`
+            : "Your workspace files have been loaded.",
+        });
+      } else {
+        console.warn('ideApi.getFiles() did not return an array:', response);
+        toast({
+          title: "Warning",
+          description: "No files found or unexpected response format.",
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching workspace files:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load workspace files.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Function to build file tree from flat file list
   const buildFileTree = (files: any[]): FileNode[] => {
     console.log('Building file tree from files:', files);
@@ -489,7 +496,7 @@ export default function IDE() {
 
     return tree;
   };
-  
+
   // Load chat history when user is authenticated
   useEffect(() => {
     if (isAuthenticated) {
@@ -497,6 +504,36 @@ export default function IDE() {
       console.log('Authentication detected, loading chat history');
     }
   }, [isAuthenticated]);
+
+  // Fetch diagnostics for the selected file
+  useEffect(() => {
+    const fetchDiagnostics = async () => {
+      if (selectedFile && selectedFile.type === 'file') {
+        try {
+          const response = await ideApi.getDiagnostics(selectedFile.path);
+          setDiagnostics(response.diagnostics);
+          console.log('Fetched diagnostics:', response.diagnostics);
+          // Optionally, add diagnostics to terminal output
+          const diagnosticOutputs: TerminalOutput[] = response.diagnostics.map(d => ({
+            id: `${d.filePath}-${d.lineNumber}-${d.columnNumber}`,
+            type: 'diagnostic',
+            content: `${d.severity.toUpperCase()}: ${d.filePath}(${d.lineNumber},${d.columnNumber}): ${d.message}`,
+            timestamp: new Date(),
+          }));
+          setTerminalOutput(prev => [...prev, ...diagnosticOutputs]);
+        } catch (error) {
+          console.error('Error fetching diagnostics:', error);
+          setDiagnostics([]);
+        }
+      } else {
+        setDiagnostics([]);
+      }
+    };
+    fetchDiagnostics();
+    // Set up a polling interval, e.g., every 5 seconds
+    const intervalId = setInterval(fetchDiagnostics, 5000);
+    return () => clearInterval(intervalId); // Cleanup on unmount or dependency change
+  }, [selectedFile]); // Re-run when selectedFile changes
 
   // Auto-scroll terminal and chat
   useEffect(() => {
@@ -518,7 +555,7 @@ export default function IDE() {
       if (e.altKey && e.key >= '1' && e.key <= '5') {
         const index = parseInt(e.key) - 1;
         const availableModelsList = availableModels.filter(m => m.available);
-        
+
         if (index < availableModelsList.length) {
           setSelectedModel(availableModelsList[index].id);
           toast({
@@ -529,7 +566,7 @@ export default function IDE() {
         }
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [availableModels, setSelectedModel, toast]);
@@ -611,7 +648,7 @@ export default function IDE() {
       if (updatedFile) {
         updatedFile.content = content;
         setFileTree([...fileTree]);
-        
+
         try {
           await fetch('/api/ide/files', {
             method: 'POST',
@@ -626,9 +663,9 @@ export default function IDE() {
             }),
           });
         } catch (error) {
-            console.log('Backend save failed, but file is saved locally');
+          console.log('Backend save failed, but file is saved locally');
         }
-        
+
         toast({
           title: "File saved",
           description: `${updatedFile.name} has been saved successfully.`,
@@ -657,7 +694,7 @@ export default function IDE() {
     if (type === 'file') {
       const extension = name.split('.').pop()?.toLowerCase();
       const validExtensions = ['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'cpp', 'go', 'json', 'md'];
-      
+
       if (!extension || !validExtensions.includes(extension)) {
         toast({
           title: "Invalid File Type",
@@ -704,7 +741,7 @@ export default function IDE() {
 
       return updateTree(prevTree);
     });
-    
+
     fetch('/api/ide/files', {
       method: 'POST',
       headers: {
@@ -733,7 +770,7 @@ export default function IDE() {
   const getBoilerplateContent = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
     const language = getLanguageFromFileName(fileName);
-    
+
     if (extension === 'jsx' || extension === 'tsx') {
       return BOILERPLATES['react'];
     } else if (extension === 'cpp') {
@@ -791,7 +828,7 @@ export default function IDE() {
             path: `${currentPath === '/workspace' ? '' : currentPath}/${file.name}`,
             content,
           };
-          
+
           setFileTree(prevTree => [...prevTree, newFile]);
           openFile(newFile);
         };
@@ -807,18 +844,19 @@ export default function IDE() {
       content: `$ ${command}`,
       timestamp: new Date(),
     };
-    
+
     setTerminalOutput(prev => [...prev, output]);
     setTerminalHistory(prev => [...prev, command]);
     setHistoryIndex(-1);
-    
+    setCurrentCommand(command);
+
     setIsLoading(true);
-    
+
     try {
       let response = '';
-      
+
       if (command.startsWith('ls') || command.startsWith('dir')) {
-        response = getCurrentFolderContents().map(node => 
+        response = getCurrentFolderContents().map(node =>
           `${node.type === 'folder' ? '📁' : '📄'} ${node.name}`
         ).join('\n');
       } else if (command.startsWith('cat ') || command.startsWith('type ')) {
@@ -845,61 +883,128 @@ export default function IDE() {
           }
         }
       } else {
-        // Send all other commands to the backend for execution
-        const result = await ideApi.runTerminalCommand(command, currentPath);
+        // Send command to backend with session management
+        const result = await ideApi.runTerminalCommand(command, currentPath, terminalSessionId || undefined);
+        
+        if (result.sessionId) {
+          setTerminalSessionId(result.sessionId);
+        }
+        
         if (result.error) {
           response = `Error: ${result.error}`;
         } else {
           response = result.output || 'Command executed successfully';
+          
+          // Check if command is waiting for input (interactive)
+          if (result.output && (
+            result.output.includes('Enter') || 
+            result.output.includes('input') || 
+            result.output.includes('password') ||
+            result.output.includes('y/n') ||
+            result.output.includes('?')
+          )) {
+            setIsWaitingForInput(true);
+            setTerminalInputMode('input');
+            setTerminalOutput(prev => [...prev, {
+              id: (Date.now() + 1).toString(),
+              type: 'prompt',
+              content: 'Waiting for input...',
+              timestamp: new Date(),
+              sessionId: result.sessionId
+            }]);
+            setIsLoading(false);
+            return;
+          }
         }
       }
-      
+
       const resultOutput: TerminalOutput = {
         id: (Date.now() + 1).toString(),
         type: response.includes('Error:') ? 'error' : 'output',
         content: response,
         timestamp: new Date(),
+        sessionId: terminalSessionId || undefined
       };
-      
+
       setTerminalOutput(prev => [...prev, resultOutput]);
     } catch (error) {
       const errorOutput: TerminalOutput = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         timestamp: new Date(),
+        sessionId: terminalSessionId || undefined
       };
       setTerminalOutput(prev => [...prev, errorOutput]);
     } finally {
       setIsLoading(false);
+      setTerminalInputMode('command');
       setTimeout(() => {
         if (terminalInputRef.current) {
           terminalInputRef.current.focus();
         }
       }, 0);
     }
-  }, [currentPath, fileTree, findFileByPath]);
+  }, [currentPath, fileTree, findFileByPath, terminalSessionId]);
 
-  const getCurrentFolderContents = useCallback(() => {
-    if (currentPath === '/workspace') return fileTree;
-    const folder = findFileByPath(currentPath, fileTree);
-    return folder?.children || [];
-  }, [currentPath, fileTree, findFileByPath]);
+  const sendTerminalInput = useCallback(async (input: string) => {
+    if (!terminalSessionId || !isWaitingForInput) return;
 
-  const navigateToFolder = useCallback((path: string) => {
-    setCurrentPath(path);
-  }, []);
+    try {
+      await ideApi.sendTerminalInput(terminalSessionId, input);
+      
+      // Add input to terminal output
+      setTerminalOutput(prev => [...prev, {
+        id: Date.now().toString(),
+        type: 'input',
+        content: input,
+        timestamp: new Date(),
+        sessionId: terminalSessionId
+      }]);
 
-  const navigateUp = useCallback(() => {
-    if (currentPath === '/workspace') return;
-    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/workspace';
-    navigateToFolder(parentPath);
-  }, [currentPath, navigateToFolder]);
+      setIsWaitingForInput(false);
+      setTerminalInputMode('command');
+      setTerminalInput('');
+      
+      // Poll for session updates
+      setTimeout(async () => {
+        try {
+          const session = await ideApi.getTerminalSession(terminalSessionId);
+          if (session.outputBuffer && session.outputBuffer.length > 0) {
+            const newOutputs = session.outputBuffer.map((output: string, index: number) => ({
+              id: `${Date.now()}-${index}`,
+              type: 'output' as const,
+              content: output,
+              timestamp: new Date(),
+              sessionId: terminalSessionId
+            }));
+            setTerminalOutput(prev => [...prev, ...newOutputs]);
+          }
+        } catch (error) {
+          console.error('Error polling session:', error);
+        }
+      }, 100);
+
+    } catch (error) {
+      console.error('Error sending input:', error);
+      setTerminalOutput(prev => [...prev, {
+        id: Date.now().toString(),
+        type: 'error',
+        content: `Error sending input: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+        sessionId: terminalSessionId
+      }]);
+    }
+  }, [terminalSessionId, isWaitingForInput]);
 
   const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && terminalInput.trim()) {
-      executeTerminalCommand(terminalInput.trim());
-      setTerminalInput('');
+      if (terminalInputMode === 'input') {
+        sendTerminalInput(terminalInput.trim());
+      } else {
+        executeTerminalCommand(terminalInput.trim());
+        setTerminalInput('');
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (terminalHistory.length > 0 && historyIndex < terminalHistory.length - 1) {
@@ -919,8 +1024,31 @@ export default function IDE() {
           setHistoryIndex(-1);
         }
       }
+    } else if (e.key === 'Escape') {
+      // Cancel input mode
+      if (terminalInputMode === 'input') {
+        setIsWaitingForInput(false);
+        setTerminalInputMode('command');
+        setTerminalInput('');
+      }
     }
-  }, [terminalInput, executeTerminalCommand, terminalHistory, historyIndex]);
+  }, [terminalInput, executeTerminalCommand, sendTerminalInput, terminalHistory, historyIndex, terminalInputMode]);
+
+  const getCurrentFolderContents = useCallback(() => {
+    if (currentPath === '/workspace') return fileTree;
+    const folder = findFileByPath(currentPath, fileTree);
+    return folder?.children || [];
+  }, [currentPath, fileTree, findFileByPath]);
+
+  const navigateToFolder = useCallback((path: string) => {
+    setCurrentPath(path);
+  }, []);
+
+  const navigateUp = useCallback(() => {
+    if (currentPath === '/workspace') return;
+    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/workspace';
+    navigateToFolder(parentPath);
+  }, [currentPath, navigateToFolder]);
 
   // Load chat history from server
   const loadChatHistory = useCallback(async () => {
@@ -928,7 +1056,7 @@ export default function IDE() {
       console.log('Not authenticated, skipping chat history load');
       return;
     }
-    
+
     console.log('Loading chat history...');
     setIsLoadingHistory(true);
     try {
@@ -951,7 +1079,7 @@ export default function IDE() {
 
       const data = await response.json();
       console.log('Chat history data received:', data);
-      
+
       if (data.messages && data.messages.length > 0) {
         console.log('Processing', data.messages.length, 'messages');
         const formattedMessages: ChatMessage[] = data.messages.map((msg: any) => ({
@@ -960,7 +1088,7 @@ export default function IDE() {
           content: msg.content,
           timestamp: new Date(msg.createdAt),
         }));
-        
+
         console.log('Setting chat messages state with formatted messages:', formattedMessages);
         setChatMessages(formattedMessages);
         toast({
@@ -985,7 +1113,7 @@ export default function IDE() {
   // Clear chat history
   const clearChatHistory = useCallback(async () => {
     if (!isAuthenticated) return;
-    
+
     try {
       // Add timestamp to prevent caching
       const timestamp = new Date().getTime();
@@ -1020,32 +1148,32 @@ export default function IDE() {
   // Add this function to recommend models based on task
   const getRecommendedModel = useCallback((task: string) => {
     const taskLower = task.toLowerCase();
-    
+
     if (taskLower.includes('image') || taskLower.includes('vision')) {
       return availableModels.find(m => m.id === 'gemini' && m.available) ? 'gemini' : 'together';
     }
-    
+
     if (taskLower.includes('debug') || taskLower.includes('fix')) {
       return availableModels.find(m => m.id === 'chatgpt' && m.available) ? 'chatgpt' : 'together';
     }
-    
+
     if (taskLower.includes('explain') || taskLower.includes('document')) {
       return availableModels.find(m => m.id === 'claude' && m.available) ? 'claude' : 'together';
     }
-    
+
     if (taskLower.includes('optimize') || taskLower.includes('performance')) {
       return availableModels.find(m => m.id === 'deepseek' && m.available) ? 'deepseek' : 'together';
     }
-    
+
     // Default to the most capable available model
     const availableModelsByComplexity = availableModels
       .filter(m => m.available)
       .sort((a, b) => {
         const complexityOrder = { 'Basic': 1, 'Medium': 2, 'Complex': 3 };
-        return complexityOrder[b.complexity as keyof typeof complexityOrder] - 
-               complexityOrder[a.complexity as keyof typeof complexityOrder];
+        return complexityOrder[b.complexity as keyof typeof complexityOrder] -
+          complexityOrder[a.complexity as keyof typeof complexityOrder];
       });
-    
+
     return availableModelsByComplexity.length > 0 ? availableModelsByComplexity[0].id : 'together';
   }, [availableModels]);
 
@@ -1053,7 +1181,7 @@ export default function IDE() {
     if (!message.trim()) return;
 
     console.log('Sending chat message:', message);
-    
+
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -1074,7 +1202,7 @@ export default function IDE() {
     try {
       const currentFileContent = selectedFile?.content || '';
       const currentFileName = selectedFile?.name || '';
-      
+
       console.log('Sending request to /api/ai/chat');
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -1101,13 +1229,14 @@ export default function IDE() {
 
       const data = await response.json();
       console.log('Received AI response:', data);
-      
+
       // Process response to properly format code blocks
       const assistantMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
         content: data.content || 'I apologize, but I couldn\'t process your request.',
         timestamp: new Date(),
+        fileChanges: data.fileChanges || [], // Include fileChanges
       };
 
       console.log('Adding assistant message to chat:', assistantMessage);
@@ -1117,6 +1246,29 @@ export default function IDE() {
         console.log('Updated chat messages with assistant response:', updated);
         return updated;
       });
+
+      // If AI suggests file changes, apply them
+      if (data.fileChanges && data.fileChanges.length > 0) {
+        console.log('AI suggested file changes:', data.fileChanges);
+        try {
+          const applyResult = await ideApi.applyFileChanges(data.fileChanges);
+          console.log('Apply file changes result:', applyResult);
+          toast({
+            title: "Files Updated",
+            description: `${data.fileChanges.length} files were updated by the AI.`,
+          });
+          // Refresh the file tree to reflect changes
+          fetchWorkspaceFiles();
+        } catch (applyError) {
+          console.error('Error applying AI file changes:', applyError);
+          toast({
+            title: "File Update Failed",
+            description: 'Failed to apply AI-suggested file changes.',
+            variant: 'destructive',
+          });
+        }
+      }
+
     } catch (error) {
       console.error('Error in sendChatMessage:', error);
       const errorMessage: ChatMessage = {
@@ -1129,7 +1281,7 @@ export default function IDE() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile, chatMessages, fileTree, selectedModel]);
+  }, [selectedFile, chatMessages, fileTree, selectedModel, toast, fetchWorkspaceFiles]); // Added toast and fetchWorkspaceFiles to dependency array
 
   const toggleFolder = useCallback((folderId: string) => {
     const updateExpanded = (nodes: FileNode[]): FileNode[] => {
@@ -1147,11 +1299,33 @@ export default function IDE() {
   }, [fileTree]);
 
   const handleCreateFileOrFolder = () => {
-    if (createDialogName.trim()) {
-      createFileOrFolder(createDialogPath, createDialogName.trim(), createDialogType);
-      setShowCreateDialog(false);
-      setCreateDialogName('');
+    if (!createDialogName.trim()) {
+      toast({
+        title: "Error",
+        description: "Name cannot be empty",
+        variant: "destructive",
+      });
+      return;
     }
+
+    // Validate file extension for known languages
+    if (createDialogType === 'file') {
+      const extension = createDialogName.split('.').pop()?.toLowerCase();
+      const validExtensions = ['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'cpp', 'go', 'json', 'md'];
+
+      if (!extension || !validExtensions.includes(extension)) {
+        toast({
+          title: "Invalid File Type",
+          description: "Please use a valid file extension (.js, .ts, .jsx, .tsx, .html, .css, .py, .java, .cpp, .go, .json, .md)",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    createFileOrFolder(createDialogPath, createDialogName.trim(), createDialogType);
+    setShowCreateDialog(false);
+    setCreateDialogName('');
   };
 
   const handleLogout = () => {
@@ -1194,7 +1368,7 @@ export default function IDE() {
       }
 
       const data = await response.json();
-      
+
       setFileTree([]);
       setOpenFiles([]);
       setSelectedFile(null);
@@ -1214,8 +1388,8 @@ export default function IDE() {
 
         for (const part of parts) {
           currentPath = currentPath ? `${currentPath}/${part}` : part;
-          
-          let dir = currentTree.find(node => 
+
+          let dir = currentTree.find(node =>
             node.type === 'folder' && node.name === part
           );
 
@@ -1324,25 +1498,25 @@ export default function IDE() {
 
   const executeCode = useCallback(async () => {
     if (!selectedFile || !selectedFile.content) return;
-    
+
     setIsExecuting(true);
-    
+
     setTerminalOutput([{
       id: Date.now().toString(),
       type: 'input',
       content: `$ Running ${selectedFile.name}...`,
       timestamp: new Date(),
     }]);
-    
+
     try {
       const language = getLanguageFromFileName(selectedFile.name);
-      
+
       const result = await ideApi.executeCode(
         selectedFile.path,
         selectedFile.content,
         language
       );
-      
+
       setTerminalOutput(prev => [
         ...prev,
         {
@@ -1352,7 +1526,7 @@ export default function IDE() {
           timestamp: new Date(),
         }
       ]);
-      
+
       if (result.error) {
         toast({
           title: "Execution Error",
@@ -1367,7 +1541,7 @@ export default function IDE() {
       }
     } catch (error) {
       console.error('Code execution error:', error);
-      
+
       setTerminalOutput(prev => [
         ...prev,
         {
@@ -1377,7 +1551,7 @@ export default function IDE() {
           timestamp: new Date(),
         }
       ]);
-      
+
       toast({
         title: "Execution Failed",
         description: "Failed to execute the code. Please try again.",
@@ -1390,7 +1564,7 @@ export default function IDE() {
 
   const getFileIcon = (fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase();
-    
+
     switch (extension) {
       case 'js':
       case 'jsx':
@@ -1465,952 +1639,1012 @@ export default function IDE() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-200">
-      {/* Header */}
-      <motion.div 
-        className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Cpu className="w-6 h-6 text-purple-500" />
-            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
-              DevMindX AI IDE
-            </h1>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => executeCode()}
-              className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 border-transparent"
-              disabled={!selectedFile || isExecuting}
-            >
-              <Play className="w-4 h-4 mr-2" />
-              {isExecuting ? 'Running...' : 'Run File'}
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setShowGenerateProjectModal(true)}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 border-transparent"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Generate Project
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setShowAIChat(!showAIChat)}
-              className={cn(
-                "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-transparent",
-                !showAIChat && "opacity-70"
-              )}
-            >
-              <Brain className="w-4 h-4 mr-2" />
-              AI Assistant
-            </Button>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button size="sm" variant="outline" onClick={handleLogout} className="border-gray-600 hover:bg-gray-700">
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
-        </div>
-      </motion.div>
-
-      {/* Main Content */}
-      <ResizablePanelGroup direction="horizontal" className="flex-grow">
-        {/* File Explorer */}
-        <ResizablePanel defaultSize={20} minSize={15}>
-          <div className="w-full h-full bg-gray-800 border-r border-gray-700 flex flex-col">
-            <div className="p-4 border-b border-gray-700 flex-shrink-0">
-              {/* Breadcrumbs */}
-              <div className="flex items-center mb-2">
-                <button 
-                  onClick={navigateUp}
-                  className="mr-2 text-gray-400 hover:text-white transition-colors"
-                  disabled={currentPath === '/workspace'}
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
-                <div className="flex items-center overflow-x-auto">
-                  {currentPath.split('/').filter(Boolean).map((part, index, parts) => {
-                    const path = ['/workspace', ...parts.slice(0, index + 1)].join('/');
-                    return (
-                      <React.Fragment key={path}>
-                        <span className="mx-1 text-gray-400">/</span>
-                        <button
-                          onClick={() => navigateToFolder(path)}
-                          className="text-blue-400 hover:underline transition-colors"
-                        >
-                          {part}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Create/upload buttons */}
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex space-x-1">
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
-                    onClick={() => {
-                      setCreateDialogType('folder');
-                      setCreateDialogPath(currentPath);
-                      setShowCreateDialog(true);
-                    }}
-                  >
-                    <FolderPlus className="w-3 h-3" />
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
-                    onClick={() => {
-                      setCreateDialogType('file');
-                      setCreateDialogPath(currentPath);
-                      setShowCreateDialog(true);
-                    }}
-                  >
-                    <FilePlus className="w-3 h-3" />
-                  </Button>
-                </div>
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <Button size="sm" variant="outline" className="h-6 border-gray-600 hover:bg-gray-700">
-                    <Upload className="w-3 h-3 mr-1" />
-                    Upload
-                  </Button>
-                </label>
-                <Input
-                  type="file"
-                  multiple
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="file-upload"
-                />
-              </div>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-200">
+        {/* Header */}
+        <motion.div
+          className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Cpu className="w-6 h-6 text-purple-500" />
+              <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+                DevMindX AI IDE
+              </h1>
             </div>
-            
-            <ScrollArea className="flex-1">
-              {getCurrentFolderContents().length === 0 ? (
-                <motion.div 
-                  className="text-center text-gray-500 py-8"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Empty folder</p>
-                </motion.div>
-              ) : (
-                getCurrentFolderContents().map(node => (
-                  <motion.div 
-                    key={node.id} 
-                    className="px-2 py-1"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div
-                      className={`flex items-center space-x-2 px-2 py-1 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
-                        selectedFile?.id === node.id ? 'bg-blue-600' : ''
-                      }`}
-                      onClick={() => {
-                        if (node.type === 'folder') {
-                          navigateToFolder(node.path);
-                        } else {
-                          openFile(node);
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setContextMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          node
-                        });
-                      }}
-                    >
-                      {node.type === 'folder' ? (
-                        <Folder className="w-4 h-4 text-blue-400" />
-                      ) : (
-                        getFileIcon(node.name)
-                      )}
-                      <span className="text-sm text-gray-200">{node.name}</span>
-                    </div>
-                  </motion.div>
-                ))
-              )}
-            </ScrollArea>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => executeCode()}
+                className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 border-transparent"
+                disabled={!selectedFile || isExecuting}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {isExecuting ? 'Running...' : 'Run File'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowGenerateProjectModal(true)}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 border-transparent"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Generate Project
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAIChat(!showAIChat)}
+                className={cn(
+                  "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-transparent",
+                  !showAIChat && "opacity-70"
+                )}
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                AI Assistant
+              </Button>
+
+              {/* Live Collaboration Button */}
+              <CollaborationButton />
+
+
+            </div>
           </div>
-        </ResizablePanel>
+          <div className="flex items-center space-x-2">
+            <Button size="sm" variant="outline" onClick={handleLogout} className="border-gray-600 hover:bg-gray-700">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        </motion.div>
 
-        <ResizableHandle withHandle />
-
-        {/* Editor */}
-        <ResizablePanel defaultSize={60} minSize={40}>
-          <div className="flex flex-col h-full">
-            {/* Tabs */}
-            {openFiles.length > 0 && (
-              <div className="bg-gray-800 border-b border-gray-700 flex items-center">
-                {openFiles.map((file) => (
-                  <motion.div
-                    key={file.id}
-                    className={`flex items-center space-x-2 px-4 py-2 cursor-pointer border-r border-gray-700 transition-colors ${
-                      activeTab === file.id ? 'bg-gray-700' : 'hover:bg-gray-700'
-                    }`}
-                    onClick={() => setActiveTab(file.id)}
-                    whileHover={{ scale: 1.02 }}
+        {/* Main Content */}
+        <ResizablePanelGroup direction="horizontal" className="flex-grow">
+          {/* File Explorer */}
+          <ResizablePanel defaultSize={20} minSize={15}>
+            <div className="w-full h-full bg-gray-800 border-r border-gray-700 flex flex-col">
+              <div className="p-4 border-b border-gray-700 flex-shrink-0">
+                {/* Breadcrumbs */}
+                <div className="flex items-center mb-2">
+                  <button
+                    onClick={navigateUp}
+                    className="mr-2 text-gray-400 hover:text-white transition-colors"
+                    disabled={currentPath === '/workspace'}
                   >
-                    {getFileIcon(file.name)}
-                    <span className="text-sm">{file.name}</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center overflow-x-auto">
+                    {currentPath.split('/').filter(Boolean).map((part, index, parts) => {
+                      const path = ['/workspace', ...parts.slice(0, index + 1)].join('/');
+                      return (
+                        <React.Fragment key={path}>
+                          <span className="mx-1 text-gray-400">/</span>
+                          <button
+                            onClick={() => navigateToFolder(path)}
+                            className="text-blue-400 hover:underline transition-colors"
+                          >
+                            {part}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Create/upload buttons */}
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex space-x-1">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-4 w-4 p-0 ml-2 hover:bg-gray-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeFile(file.id);
+                      className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
+                      onClick={() => {
+                        setCreateDialogType('folder');
+                        setCreateDialogPath(currentPath);
+                        setShowCreateDialog(true);
                       }}
                     >
-                      <X className="w-3 h-3" />
+                      <FolderPlus className="w-3 h-3" />
                     </Button>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-            
-            {/* Editor */}
-            <div className="flex-1">
-              {selectedFile ? (
-                <Editor
-                  height="100%"
-                  defaultLanguage="javascript"
-                  language={getLanguageFromFileName(selectedFile.name)}
-                  value={selectedFile.content}
-                  onChange={(value) => {
-                    if (value !== undefined) {
-                      setSelectedFile(prev => prev ? { ...prev, content: value } : null);
-                      setTimeout(() => {
-                        saveFile(selectedFile.id, value);
-                      }, 2000);
-                    }
-                  }}
-                  theme="vs-dark"
-                  options={{
-                    minimap: { enabled: true },
-                    fontSize: 14,
-                    wordWrap: 'on',
-                    automaticLayout: true,
-                    scrollBeyondLastLine: false,
-                    renderWhitespace: 'selection',
-                    cursorBlinking: 'smooth',
-                    cursorSmoothCaretAnimation: "on",
-                    smoothScrolling: true,
-                  }}
-                  beforeMount={(monaco) => {
-                    monaco.editor.defineTheme('futuristic', {
-                      base: 'vs-dark',
-                      inherit: true,
-                      rules: [
-                        { token: '', foreground: 'D4D4D4', background: '1A1A1A' },
-                        { token: 'keyword', foreground: '569CD6' },
-                        { token: 'type', foreground: '4EC9B0' },
-                        { token: 'string', foreground: 'CE9178' },
-                        { token: 'number', foreground: 'B5CEA8' },
-                        { token: 'comment', foreground: '6A9955' },
-                      ],
-                      colors: {
-                        'editor.background': '#1A1A1A',
-                        'editor.lineHighlightBackground': '#2A2A2A',
-                        'editorCursor.foreground': '#A6E22E',
-                        'editor.selectionBackground': '#3E3E3E',
-                        'editor.inactiveSelectionBackground': '#3E3E3E',
-                      }
-                    });
-                    monaco.editor.setTheme('futuristic');
-                  }}
-                />
-              ) : (
-                <motion.div 
-                  className="flex items-center justify-center h-full text-gray-500"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <div className="text-center">
-                    <FileCode className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg">No file selected</p>
-                    <p className="text-sm text-gray-600 mt-2">Open a file from the explorer to start coding</p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 hover:bg-gray-700 transition-colors"
+                      onClick={() => {
+                        setCreateDialogType('file');
+                        setCreateDialogPath(currentPath);
+                        setShowCreateDialog(true);
+                      }}
+                    >
+                      <FilePlus className="w-3 h-3" />
+                    </Button>
                   </div>
-                </motion.div>
-              )}
-            </div>
-          </div>
-        </ResizablePanel>
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    <Button size="sm" variant="outline" className="h-6 border-gray-600 hover:bg-gray-700">
+                      <Upload className="w-3 h-3 mr-1" />
+                      Upload
+                    </Button>
+                  </label>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                </div>
+              </div>
 
-        {/* AI Chat Panel */}
-        {showAIChat && (
-          <>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={20} minSize={15}>
-              <div className="w-full h-full bg-gray-800 border-l border-gray-700 flex flex-col" style={{ zIndex: 10 }}>
-                <div className="p-4 border-b border-gray-700 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold flex items-center">
-                      <Brain className="w-5 h-5 mr-2 text-purple-500" />
-                      AI Assistant
-                    </h3>
-                    <div className="flex space-x-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+              <ScrollArea className="flex-1">
+                {getCurrentFolderContents().length === 0 ? (
+                  <motion.div
+                    className="text-center text-gray-500 py-8"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Empty folder</p>
+                  </motion.div>
+                ) : (
+                  getCurrentFolderContents().map(node => (
+                    <motion.div
+                      key={node.id}
+                      className="px-2 py-1"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div
+                        className={`flex items-center space-x-2 px-2 py-1 rounded cursor-pointer hover:bg-gray-700 transition-colors ${selectedFile?.id === node.id ? 'bg-blue-600' : ''
+                          }`}
                         onClick={() => {
-                          loadChatHistory();
-                          toast({
-                            title: 'Chat History',
-                            description: 'Your chat history has been loaded',
+                          if (node.type === 'folder') {
+                            navigateToFolder(node.path);
+                          } else {
+                            openFile(node);
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            node
                           });
                         }}
-                        disabled={isLoadingHistory}
-                        className="text-xs hover:bg-gray-700"
                       >
-                        {isLoadingHistory ? (
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        {node.type === 'folder' ? (
+                          <Folder className="w-4 h-4 text-blue-400" />
                         ) : (
-                          <History className="w-3 h-3 mr-1" />
+                          getFileIcon(node.name)
                         )}
-                        Show History
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={clearChatHistory}
-                        className="text-xs hover:bg-gray-700"
-                      >
-                        <RotateCcw className="w-3 h-3 mr-1" />
-                        Clear
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-hidden" style={{ minHeight: '300px' }}>
-                  <ScrollArea 
-                    ref={chatRef}
-                    className="h-full p-4 space-y-4"
-                  >
-
-                    {chatMessages.length === 0 && (
-                      <div className="flex items-center justify-center h-full text-gray-500">
-                        <div className="text-center">
-                          <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                          <p className="text-lg">No messages yet</p>
-                          <p className="text-sm text-gray-600 mt-2">Start a conversation with the AI assistant</p>
-                        </div>
+                        <span className="text-sm text-gray-200">{node.name}</span>
                       </div>
-                    )}
-                    {chatMessages.length > 0 && chatMessages.map((message) => (
-                      <motion.div
-                        key={message.id}
-                        className={cn(
-                          "flex",
-                          message.role === 'user' ? 'justify-end' : 'justify-start'
-                        )}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <div
-                          className={cn(
-                            "max-w-xs px-3 py-2 rounded-lg transition-all",
-                            message.role === 'user' 
-                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white' 
-                              : 'bg-gray-700 text-gray-200'
-                          )}
-                        >
-                          {/* Simple content display for debugging */}
-                          <div className="whitespace-pre-wrap">{message.content}</div>
-                        </div>
-                      </motion.div>
-                    ))}
-                    {isLoading && (
-                      <motion.div 
-                        className="flex justify-start"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                      >
-                        <div className="px-3 py-2 rounded-lg bg-gray-700 text-gray-200">
-                          <div className="flex space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce"></div>
-                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </ScrollArea>
-                </div>
-                <div className="p-4 border-t border-gray-700 flex-shrink-0">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Bot className="w-4 h-4 text-blue-400" />
-                    <Select value={selectedModel} onValueChange={setSelectedModel}>
-                      <SelectTrigger className="h-8 text-xs bg-gray-700 border-gray-600 focus:border-blue-500">
-                        <SelectValue placeholder="Select AI Model" />
-                        <div className="ml-2">
-                          <HelpCircle className="w-3 h-3 text-gray-400 hover:text-white cursor-help" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Show model comparison tooltip
-                              toast({
-                                title: "AI Model Information",
-                                description: (
-                                  <div className="text-xs space-y-1">
-                                    {availableModels.find(m => m.id === selectedModel)?.features?.map(feature => (
-                                      <div key={feature} className="flex items-center">
-                                        <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
-                                        <span>{feature}</span>
-                                      </div>
-                                    ))}
-                                    <Button 
-                                      variant="link" 
-                                      size="sm" 
-                                      className="text-blue-400 p-0 h-auto" 
-                                      onClick={() => navigate('/account')}
-                                    >
-                                      Manage subscriptions
-                                    </Button>
-                                  </div>
-                                ),
-                                duration: 5000,
-                              });
-                            }}
-                          />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        {availableModels.map((model) => (
-                          <SelectItem 
-                            key={model.id} 
-                            value={model.id}
-                            disabled={!model.available}
-                            className={!model.available ? 'opacity-50' : ''}
-                          >
-                            <div className="flex items-center">
-                              <span className="text-white">{model.name}</span>
-                              {!model.available && !model.purchased && model.id !== 'together' && (
-                                <Lock className="ml-2 w-4 h-4 text-gray-400" />
-                              )}
-                              {model.available && model.id !== 'together' && (
-                                <Badge variant="outline" className="ml-2 text-xs bg-green-800 text-green-200 border-green-700">
-                                  Purchased
-                                </Badge>
-                              )}
-                              {model.available && model.id === 'together' && (
-                                <Badge variant="outline" className="ml-2 text-xs bg-blue-800 text-blue-200 border-blue-700">
-                                  Free
-                                </Badge>
-                              )}
-                              {!model.available && model.purchased && (
-                                <Badge variant="outline" className="ml-2 text-xs bg-yellow-800 text-yellow-200 border-yellow-700">
-                                  Purchased (API Unavailable)
-                                </Badge>
-                              )}
-                              {!model.available && !model.purchased && model.id === 'together' && (
-                                <Badge variant="outline" className="ml-2 text-xs">
-                                  Unavailable
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Quick switch: Alt+1 to Alt+{availableModels.filter(m => m.available).length}
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs text-gray-400 hover:text-white"
-                        onClick={() => {
-                          const recommendedModel = getRecommendedModel(chatInput);
-                          if (recommendedModel !== selectedModel) {
-                            setSelectedModel(recommendedModel);
-                            toast({
-                              title: "Model Recommendation",
-                              description: `Switched to ${availableModels.find(m => m.id === recommendedModel)?.name} based on your task.`,
-                              duration: 3000,
-                            });
-                          }
-                        }}
-                      >
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Best Model
-                      </Button>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Input
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Ask AI for help..."
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            sendChatMessage(chatInput);
-                          }
-                        }}
-                        className="flex-1 bg-gray-700 border-gray-600 focus:border-blue-500"
-                      />
-                      <Button 
-                        onClick={() => sendChatMessage(chatInput)} 
-                        size="sm"
-                        disabled={isLoading}
-                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                      >
-                        <Send className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </ResizablePanel>
-          </>
-        )}
-      </ResizablePanelGroup>
+                    </motion.div>
+                  ))
+                )}
+              </ScrollArea>
+            </div>
+          </ResizablePanel>
 
-      {/* Terminal */}
-      <div 
-        className="bg-gray-800 border-t border-gray-700 flex flex-col relative"
-        style={{ height: `${terminalHeight}px` }}
-      >
-        <div 
-          className="absolute top-0 left-0 right-0 h-2 cursor-row-resize z-10"
-          ref={terminalResizeRef}
-          onMouseDown={() => setIsDraggingTerminal(true)}
-        />
-        <div className="flex items-center justify-between p-2 border-b border-gray-700">
-          <h3 className="font-semibold text-sm flex items-center">
-            <Terminal className="w-4 h-4 mr-2 text-green-500" />
-            Terminal
-          </h3>
-          <div className="flex items-center space-x-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => executeTerminalCommand('clear')}
-              className="hover:bg-gray-700 border-gray-600"
-            >
-              <Trash2 className="w-4 h-4 mr-1" />
-              Clear
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setShowTerminal(!showTerminal)}
-              className="hover:bg-gray-700 border-gray-600"
-            >
-              {showTerminal ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-        {showTerminal && (
-          <div className="flex-1 flex flex-col">
-            <ScrollArea 
-              ref={terminalRef}
-              className="flex-1 p-2 font-mono text-sm"
-            >
-              {terminalOutput.map((line, index) => (
-                <motion.div 
-                  key={index} 
-                  className={`${
-                    line.type === 'input' ? 'text-green-400' :
-                    line.type === 'error' ? 'text-red-400' :
-                    'text-gray-300'
-                  }`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {line.content}
-                </motion.div>
-              ))}
-              {isExecuting && (
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <span className="animate-pulse">⏺</span>
-                  <span>Running...</span>
+          <ResizableHandle withHandle />
+
+          {/* Editor */}
+          <ResizablePanel defaultSize={60} minSize={40}>
+            <div className="flex flex-col h-full">
+              {/* Tabs */}
+              {openFiles.length > 0 && (
+                <div className="bg-gray-800 border-b border-gray-700 flex items-center">
+                  {openFiles.map((file) => (
+                    <motion.div
+                      key={file.id}
+                      className={`flex items-center space-x-2 px-4 py-2 cursor-pointer border-r border-gray-700 transition-colors ${activeTab === file.id ? 'bg-gray-700' : 'hover:bg-gray-700'
+                        }`}
+                      onClick={() => setActiveTab(file.id)}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      {getFileIcon(file.name)}
+                      <span className="text-sm">{file.name}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-4 w-4 p-0 ml-2 hover:bg-gray-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeFile(file.id);
+                        }}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </motion.div>
+                  ))}
                 </div>
               )}
-            </ScrollArea>
-            <div className="flex items-center space-x-2 p-2 border-t border-gray-700">
-              <span className="text-green-400">$</span>
-              <Input
-                ref={terminalInputRef}
-                value={terminalInput}
-                onChange={(e) => setTerminalInput(e.target.value)}
-                onKeyDown={handleTerminalKeyDown}
-                placeholder="Enter command..."
-                className="flex-1 bg-gray-700 border-gray-600 text-green-400 font-mono"
-                autoFocus
-              />
+
+              {/* Editor */}
+              <div className="flex-1">
+                {selectedFile ? (
+                  <Editor
+                    height="100%"
+                    defaultLanguage="javascript"
+                    language={getLanguageFromFileName(selectedFile.name)}
+                    value={selectedFile.content}
+                    onChange={(value) => {
+                      if (value !== undefined) {
+                        setSelectedFile(prev => prev ? { ...prev, content: value } : null);
+                        setTimeout(() => {
+                          saveFile(selectedFile.id, value);
+                        }, 2000);
+                      }
+                    }}
+                    theme="vs-dark"
+                    options={{
+                      minimap: { enabled: true },
+                      fontSize: 14,
+                      wordWrap: 'on',
+                      automaticLayout: true,
+                      scrollBeyondLastLine: false,
+                      renderWhitespace: 'selection',
+                      cursorBlinking: 'smooth',
+                      cursorSmoothCaretAnimation: "on",
+                      smoothScrolling: true,
+                    }}
+                    beforeMount={(monaco) => {
+                      monaco.editor.defineTheme('futuristic', {
+                        base: 'vs-dark',
+                        inherit: true,
+                        rules: [
+                          { token: '', foreground: 'D4D4D4', background: '1A1A1A' },
+                          { token: 'keyword', foreground: '569CD6' },
+                          { token: 'type', foreground: '4EC9B0' },
+                          { token: 'string', foreground: 'CE9178' },
+                          { token: 'number', foreground: 'B5CEA8' },
+                          { token: 'comment', foreground: '6A9955' },
+                        ],
+                        colors: {
+                          'editor.background': '#1A1A1A',
+                          'editor.lineHighlightBackground': '#2A2A2A',
+                          'editorCursor.foreground': '#A6E22E',
+                          'editor.selectionBackground': '#3E3E3E',
+                          'editor.inactiveSelectionBackground': '#3E3E3E',
+                        }
+                      });
+                      monaco.editor.setTheme('futuristic');
+                    }}
+                  />
+                ) : (
+                  <motion.div
+                    className="flex items-center justify-center h-full text-gray-500"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <div className="text-center">
+                      <FileCode className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg">No file selected</p>
+                      <p className="text-sm text-gray-600 mt-2">Open a file from the explorer to start coding</p>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          </ResizablePanel>
 
-      {/* Create File/Folder Dialog */}
-      <AnimatePresence>
-        {showCreateDialog && (
-          <motion.div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', damping: 20 }}
-            >
-              <Card className="w-96 bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    {createDialogType === 'file' ? (
-                      <FilePlus className="w-5 h-5 mr-2 text-blue-500" />
-                    ) : (
-                      <FolderPlus className="w-5 h-5 mr-2 text-blue-500" />
-                    )}
-                    Create {createDialogType === 'file' ? 'File' : 'Folder'}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Name</label>
-                      <Input
-                        value={createDialogName}
-                        onChange={(e) => setCreateDialogName(e.target.value)}
-                        placeholder={`Enter ${createDialogType} name`}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleCreateFileOrFolder();
-                          }
-                        }}
-                        className="bg-gray-700 border-gray-600"
-                        autoFocus
-                      />
-                    </div>
-                    
-                    {createDialogType === 'file' && (
-                      <div>
-                        <label className="text-sm font-medium">File Type</label>
-                        <div className="grid grid-cols-3 gap-2 mt-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.js') ? prev : prev + '.js')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            JavaScript
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.ts') ? prev : prev + '.ts')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            TypeScript
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.jsx') ? prev : prev + '.jsx')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            React
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.html') ? prev : prev + '.html')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            HTML
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.css') ? prev : prev + '.css')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            CSS
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.py') ? prev : prev + '.py')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            Python
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.java') ? prev : prev + '.java')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            Java
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.cpp') ? prev : prev + '.cpp')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            C++
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.go') ? prev : prev + '.go')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            Go
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.json') ? prev : prev + '.json')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            JSON
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreateDialogName(prev => prev.endsWith('.md') ? prev : prev + '.md')}
-                            className="text-xs border-gray-600 hover:bg-gray-700"
-                          >
-                            Markdown
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="flex space-x-2">
-                      <Button 
-                        onClick={handleCreateFileOrFolder} 
-                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                      >
-                        Create {createDialogType === 'file' ? 'File' : 'Folder'}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setShowCreateDialog(false)}
-                        className="flex-1 border-gray-600 hover:bg-gray-700"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Generate Project Modal */}
-      <AnimatePresence>
-        {showGenerateProjectModal && (
-          <motion.div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', damping: 20 }}
-            >
-              <Card className="w-[500px] max-w-[90vw] bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Zap className="w-5 h-5 mr-2 text-purple-500" />
-                    Generate Project
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">Project Idea or Description</label>
-                      <textarea
-                        value={projectPrompt}
-                        onChange={(e) => setProjectPrompt(e.target.value)}
-                        placeholder="Describe your project idea in detail..."
-                        className="w-full h-32 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                        disabled={isGeneratingProject}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">Framework (Optional)</label>
-                      <select
-                        value={projectFramework}
-                        onChange={(e) => setProjectFramework(e.target.value)}
-                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                        disabled={isGeneratingProject}
-                      >
-                        <option value="">Select a framework (optional)</option>
-                        <option value="react">React</option>
-                        <option value="vue">Vue</option>
-                        <option value="angular">Angular</option>
-                        <option value="node">Node.js</option>
-                        <option value="express">Express</option>
-                        <option value="next">Next.js</option>
-                        <option value="django">Django</option>
-                        <option value="flask">Flask</option>
-                        <option value="rails">Ruby on Rails</option>
-                        <option value="spring">Spring Boot</option>
-                        <option value="mern">MERN Stack</option>
-                        <option value="mean">MEAN Stack</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">Project Name (Optional)</label>
-                      <Input
-                        value={projectName}
-                        onChange={(e) => setProjectName(e.target.value)}
-                        placeholder="Enter project name"
-                        className="bg-gray-700 border-gray-600 text-white"
-                        disabled={isGeneratingProject}
-                      />
-                    </div>
-                    
-                    <div className="flex space-x-2 pt-2">
-                      <Button 
-                        onClick={handleGenerateProject} 
-                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                        disabled={isGeneratingProject || !projectPrompt.trim()}
-                      >
-                        {isGeneratingProject ? (
-                          <>
-                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="w-4 h-4 mr-2" />
-                            Generate
-                          </>
-                        )}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setShowGenerateProjectModal(false)}
-                        className="flex-1 border-gray-600 hover:bg-gray-700"
-                        disabled={isGeneratingProject}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Context Menu */}
-      {contextMenu && (
-        <motion.div 
-          className="fixed z-50 bg-gray-800 border border-gray-600 rounded shadow-lg py-1"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onMouseLeave={() => setContextMenu(null)}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          transition={{ duration: 0.1 }}
-        >
-          {contextMenu.node?.type === 'folder' && (
+          {/* AI Chat Panel */}
+          {showAIChat && (
             <>
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
-                onClick={() => {
-                  navigateToFolder(contextMenu.node!.path);
-                  setContextMenu(null);
-                }}
-              >
-                <FolderOpen className="w-4 h-4" />
-                <span>Open in Explorer</span>
-              </button>
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
-                onClick={() => {
-                  setCreateDialogType('file');
-                  setCreateDialogPath(contextMenu.node!.path);
-                  setShowCreateDialog(true);
-                  setContextMenu(null);
-                }}
-              >
-                <FilePlus className="w-4 h-4" />
-                <span>Create file here</span>
-              </button>
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
-                onClick={() => {
-                  setCreateDialogType('folder');
-                  setCreateDialogPath(contextMenu.node!.path);
-                  setShowCreateDialog(true);
-                  setContextMenu(null);
-                }}
-              >
-                <FolderPlus className="w-4 h-4" />
-                <span>Create subfolder</span>
-              </button>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={20} minSize={15}>
+                <div className="w-full h-full bg-gray-800 border-l border-gray-700 flex flex-col" style={{ zIndex: 10 }}>
+                  <div className="p-4 border-b border-gray-700 flex-shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold flex items-center">
+                        <Brain className="w-5 h-5 mr-2 text-purple-500" />
+                        AI Assistant
+                      </h3>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            loadChatHistory();
+                            toast({
+                              title: 'Chat History',
+                              description: 'Your chat history has been loaded',
+                            });
+                          }}
+                          disabled={isLoadingHistory}
+                          className="text-xs hover:bg-gray-700"
+                        >
+                          {isLoadingHistory ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <History className="w-3 h-3 mr-1" />
+                          )}
+                          Show History
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearChatHistory}
+                          className="text-xs hover:bg-gray-700"
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-hidden" style={{ minHeight: '300px' }}>
+                    <ScrollArea
+                      ref={chatRef}
+                      className="h-full p-4 space-y-4"
+                    >
+
+                      {chatMessages.length === 0 && (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                          <div className="text-center">
+                            <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <p className="text-lg">No messages yet</p>
+                            <p className="text-sm text-gray-600 mt-2">Start a conversation with the AI assistant</p>
+                          </div>
+                        </div>
+                      )}
+                      {chatMessages.length > 0 && chatMessages.map((message) => (
+                        <motion.div
+                          key={message.id}
+                          className={cn(
+                            "flex",
+                            message.role === 'user' ? 'justify-end' : 'justify-start'
+                          )}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <div
+                            className={cn(
+                              "max-w-xs px-3 py-2 rounded-lg transition-all",
+                              message.role === 'user'
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                                : 'bg-gray-700 text-gray-200'
+                            )}
+                          >
+                            {/* Simple content display for debugging */}
+                            <div className="whitespace-pre-wrap">{message.content}</div>
+                          </div>
+                        </motion.div>
+                      ))}
+                      {isLoading && (
+                        <motion.div
+                          className="flex justify-start"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <div className="px-3 py-2 rounded-lg bg-gray-700 text-gray-200">
+                            <div className="flex space-x-2">
+                              <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce"></div>
+                              <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                              <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                  <div className="p-4 border-t border-gray-700 flex-shrink-0">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Bot className="w-4 h-4 text-blue-400" />
+                      <Select value={selectedModel} onValueChange={setSelectedModel}>
+                        <SelectTrigger className="h-8 text-xs bg-gray-700 border-gray-600 focus:border-blue-500">
+                          <SelectValue placeholder="Select AI Model" />
+                          <div className="ml-2">
+                            <HelpCircle className="w-3 h-3 text-gray-400 hover:text-white cursor-help"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Show model comparison tooltip
+                                toast({
+                                  title: "AI Model Information",
+                                  description: (
+                                    <div className="text-xs space-y-1">
+                                      {availableModels.find(m => m.id === selectedModel)?.features?.map(feature => (
+                                        <div key={feature} className="flex items-center">
+                                          <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
+                                          <span>{feature}</span>
+                                        </div>
+                                      ))}
+                                      <Button
+                                        variant="link"
+                                        size="sm"
+                                        className="text-blue-400 p-0 h-auto"
+                                        onClick={() => navigate('/account')}
+                                      >
+                                        Manage subscriptions
+                                      </Button>
+                                    </div>
+                                  ),
+                                  duration: 5000,
+                                });
+                              }}
+                            />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-gray-700">
+                          {availableModels.map((model) => (
+                            <SelectItem
+                              key={model.id}
+                              value={model.id}
+                              disabled={!model.available}
+                              className={!model.available ? 'opacity-50' : ''}
+                            >
+                              <div className="flex items-center">
+                                <span className="text-white">{model.name}</span>
+                                {!model.available && !model.purchased && model.id !== 'together' && (
+                                  <Lock className="ml-2 w-4 h-4 text-gray-400" />
+                                )}
+                                {model.available && model.id !== 'together' && (
+                                  <Badge variant="outline" className="ml-2 text-xs bg-green-800 text-green-200 border-green-700">
+                                    Purchased
+                                  </Badge>
+                                )}
+                                {model.available && model.id === 'together' && (
+                                  <Badge variant="outline" className="ml-2 text-xs bg-blue-800 text-blue-200 border-blue-700">
+                                    Free
+                                  </Badge>
+                                )}
+                                {!model.available && model.purchased && (
+                                  <Badge variant="outline" className="ml-2 text-xs bg-yellow-800 text-yellow-200 border-yellow-700">
+                                    Purchased (API Unavailable)
+                                  </Badge>
+                                )}
+                                {!model.available && !model.purchased && model.id === 'together' && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    Unavailable
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Quick switch: Alt+1 to Alt+{availableModels.filter(m => m.available).length}
+                      </div>
+                    </div>
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-gray-400 hover:text-white"
+                          onClick={() => {
+                            const recommendedModel = getRecommendedModel(chatInput);
+                            if (recommendedModel !== selectedModel) {
+                              setSelectedModel(recommendedModel);
+                              toast({
+                                title: "Model Recommendation",
+                                description: `Switched to ${availableModels.find(m => m.id === recommendedModel)?.name} based on your task.`,
+                                duration: 3000,
+                              });
+                            }
+                          }}
+                        >
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Best Model
+                        </Button>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Input
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Ask AI for help..."
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              sendChatMessage(chatInput);
+                            }
+                          }}
+                          className="flex-1 bg-gray-700 border-gray-600 focus:border-blue-500"
+                        />
+                        <Button
+                          onClick={() => sendChatMessage(chatInput)}
+                          size="sm"
+                          disabled={isLoading}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ResizablePanel>
             </>
           )}
-          {contextMenu.node?.type === 'file' && (
+        </ResizablePanelGroup>
+
+        {/* Terminal */}
+        <div
+          className="bg-gray-800 border-t border-gray-700 flex flex-col relative"
+          style={{ height: `${terminalHeight}px` }}
+        >
+          <div
+            className="absolute top-0 left-0 right-0 h-2 cursor-row-resize z-10"
+            ref={terminalResizeRef}
+            onMouseDown={() => setIsDraggingTerminal(true)}
+          />
+          <div className="flex items-center justify-between p-2 border-b border-gray-700">
+            <h3 className="font-semibold text-sm flex items-center">
+              <Terminal className={`w-4 h-4 mr-2 ${isWaitingForInput ? 'text-blue-500 animate-pulse' : 'text-green-500'}`} />
+              Terminal
+              {isWaitingForInput && (
+                <Badge variant="outline" className="ml-2 text-xs bg-blue-800 text-blue-200 border-blue-700">
+                  Waiting for Input
+                </Badge>
+              )}
+            </h3>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => executeTerminalCommand('clear')}
+                className="hover:bg-gray-700 border-gray-600"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Clear
+              </Button>
+              {terminalSessionId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await ideApi.killTerminalSession(terminalSessionId);
+                      setTerminalSessionId(null);
+                      setIsWaitingForInput(false);
+                      setTerminalInputMode('command');
+                      toast({
+                        title: "Session Killed",
+                        description: "Terminal session has been terminated.",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Error",
+                        description: "Failed to kill terminal session.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  className="hover:bg-gray-700 border-gray-600 text-red-400"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Kill Session
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTerminal(!showTerminal)}
+                className="hover:bg-gray-700 border-gray-600"
+              >
+                {showTerminal ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+          {showTerminal && (
+            <div className="flex-1 flex flex-col">
+              <ScrollArea
+                ref={terminalRef}
+                className="flex-1 p-2 font-mono text-sm"
+              >
+                {terminalOutput.map((line, index) => (
+                  <motion.div
+                    key={index}
+                    className={`${line.type === 'input' ? 'text-green-400' :
+                      line.type === 'error' ? 'text-red-400' :
+                        line.type === 'diagnostic' ? 'text-yellow-400' :
+                          line.type === 'prompt' ? 'text-blue-400' :
+                            'text-gray-300'
+                      }`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {line.content}
+                  </motion.div>
+                ))}
+                {isExecuting && (
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <span className="animate-pulse">⏺</span>
+                    <span>Running...</span>
+                  </div>
+                )}
+              </ScrollArea>
+              <div className="flex items-center space-x-2 p-2 border-t border-gray-700">
+                <span className={terminalInputMode === 'input' ? 'text-blue-400' : 'text-green-400'}>
+                  {terminalInputMode === 'input' ? '>' : '$'}
+                </span>
+                <Input
+                  ref={terminalInputRef}
+                  value={terminalInput}
+                  onChange={(e) => setTerminalInput(e.target.value)}
+                  onKeyDown={handleTerminalKeyDown}
+                  placeholder={terminalInputMode === 'input' ? 'Enter input...' : 'Enter command...'}
+                  className={`flex-1 bg-gray-700 border-gray-600 font-mono ${
+                    terminalInputMode === 'input' ? 'text-blue-400 border-blue-500' : 'text-green-400'
+                  }`}
+                  autoFocus
+                />
+                {terminalInputMode === 'input' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsWaitingForInput(false);
+                      setTerminalInputMode('command');
+                      setTerminalInput('');
+                    }}
+                    className="text-xs border-gray-600 hover:bg-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Create File/Folder Dialog */}
+        <AnimatePresence>
+          {showCreateDialog && (
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: 'spring', damping: 20 }}
+              >
+                <Card className="w-96 bg-gray-800 border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      {createDialogType === 'file' ? (
+                        <FilePlus className="w-5 h-5 mr-2 text-blue-500" />
+                      ) : (
+                        <FolderPlus className="w-5 h-5 mr-2 text-blue-500" />
+                      )}
+                      Create {createDialogType === 'file' ? 'File' : 'Folder'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Name</label>
+                        <Input
+                          value={createDialogName}
+                          onChange={(e) => setCreateDialogName(e.target.value)}
+                          placeholder={`Enter ${createDialogType} name`}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCreateFileOrFolder();
+                            }
+                          }}
+                          className="bg-gray-700 border-gray-600"
+                          autoFocus
+                        />
+                      </div>
+
+                      {createDialogType === 'file' && (
+                        <div>
+                          <label className="text-sm font-medium">File Type</label>
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.js') ? prev : prev + '.js')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              JavaScript
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.ts') ? prev : prev + '.ts')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              TypeScript
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.jsx') ? prev : prev + '.jsx')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              React
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.html') ? prev : prev + '.html')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              HTML
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.css') ? prev : prev + '.css')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              CSS
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.py') ? prev : prev + '.py')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              Python
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.java') ? prev : prev + '.java')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              Java
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.cpp') ? prev : prev + '.cpp')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              C++
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.go') ? prev : prev + '.go')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              Go
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.json') ? prev : prev + '.json')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              JSON
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCreateDialogName(prev => prev.endsWith('.md') ? prev : prev + '.md')}
+                              className="text-xs border-gray-600 hover:bg-gray-700"
+                            >
+                              Markdown
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={handleCreateFileOrFolder}
+                          className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                        >
+                          Create {createDialogType === 'file' ? 'File' : 'Folder'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowCreateDialog(false)}
+                          className="flex-1 border-gray-600 hover:bg-gray-700"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Generate Project Modal */}
+        <AnimatePresence>
+          {showGenerateProjectModal && (
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: 'spring', damping: 20 }}
+              >
+                <Card className="w-[500px] max-w-[90vw] bg-gray-800 border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Zap className="w-5 h-5 mr-2 text-purple-500" />
+                      Generate Project
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Project Idea or Description</label>
+                        <textarea
+                          value={projectPrompt}
+                          onChange={(e) => setProjectPrompt(e.target.value)}
+                          placeholder="Describe your project idea in detail..."
+                          className="w-full h-32 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          disabled={isGeneratingProject}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Framework (Optional)</label>
+                        <select
+                          value={projectFramework}
+                          onChange={(e) => setProjectFramework(e.target.value)}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          disabled={isGeneratingProject}
+                        >
+                          <option value="">Select a framework (optional)</option>
+                          <option value="react">React</option>
+                          <option value="vue">Vue</option>
+                          <option value="angular">Angular</option>
+                          <option value="node">Node.js</option>
+                          <option value="express">Express</option>
+                          <option value="next">Next.js</option>
+                          <option value="django">Django</option>
+                          <option value="flask">Flask</option>
+                          <option value="rails">Ruby on Rails</option>
+                          <option value="spring">Spring Boot</option>
+                          <option value="mern">MERN Stack</option>
+                          <option value="mean">MEAN Stack</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Project Name (Optional)</label>
+                        <Input
+                          value={projectName}
+                          onChange={(e) => setProjectName(e.target.value)}
+                          placeholder="Enter project name"
+                          className="bg-gray-700 border-gray-600 text-white"
+                          disabled={isGeneratingProject}
+                        />
+                      </div>
+
+                      <div className="flex space-x-2 pt-2">
+                        <Button
+                          onClick={handleGenerateProject}
+                          className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          disabled={isGeneratingProject || !projectPrompt.trim()}
+                        >
+                          {isGeneratingProject ? (
+                            <>
+                              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4 mr-2" />
+                              Generate
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowGenerateProjectModal(false)}
+                          className="flex-1 border-gray-600 hover:bg-gray-700"
+                          disabled={isGeneratingProject}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <motion.div
+            className="fixed z-50 bg-gray-800 border border-gray-600 rounded shadow-lg py-1"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onMouseLeave={() => setContextMenu(null)}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.1 }}
+          >
+            {contextMenu.node?.type === 'folder' && (
+              <>
+                <button
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+                  onClick={() => {
+                    navigateToFolder(contextMenu.node!.path);
+                    setContextMenu(null);
+                  }}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  <span>Open in Explorer</span>
+                </button>
+                <button
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+                  onClick={() => {
+                    setCreateDialogType('file');
+                    setCreateDialogPath(contextMenu.node!.path);
+                    setShowCreateDialog(true);
+                    setContextMenu(null);
+                  }}
+                >
+                  <FilePlus className="w-4 h-4" />
+                  <span>Create file here</span>
+                </button>
+                <button
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+                  onClick={() => {
+                    setCreateDialogType('folder');
+                    setCreateDialogPath(contextMenu.node!.path);
+                    setShowCreateDialog(true);
+                    setContextMenu(null);
+                  }}
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  <span>Create subfolder</span>
+                </button>
+              </>
+            )}
+            {contextMenu.node?.type === 'file' && (
+              <button
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+                onClick={() => {
+                  openFile(contextMenu.node!);
+                  setContextMenu(null);
+                }}
+              >
+                <File className="w-4 h-4" />
+                <span>Open file</span>
+              </button>
+            )}
+            <div className="border-t border-gray-600 my-1"></div>
             <button
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 text-red-400 transition-colors"
               onClick={() => {
-                openFile(contextMenu.node!);
+                if (contextMenu.node) {
+                  deleteFile(contextMenu.node.id);
+                }
                 setContextMenu(null);
               }}
             >
-              <File className="w-4 h-4" />
-              <span>Open file</span>
+              <Trash2 className="w-4 h-4" />
+              <span>Delete</span>
             </button>
-          )}
-          <div className="border-t border-gray-600 my-1"></div>
-          <button
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center space-x-2 text-red-400 transition-colors"
-            onClick={() => {
-              if (contextMenu.node) {
-                deleteFile(contextMenu.node.id);
-              }
-              setContextMenu(null);
-            }}
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>Delete</span>
-          </button>
-        </motion.div>
-      )}
-    </div>
+          </motion.div>
+        )}
+      </div>
   );
 }
+
+
+
+
+

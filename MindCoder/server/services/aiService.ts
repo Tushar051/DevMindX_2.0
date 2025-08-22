@@ -6,7 +6,7 @@ import { generateProjectWithClaude, generateCodeWithClaude, chatWithClaude, anal
 import { generateProjectWithDeepSeek, generateCodeWithDeepSeek, chatWithDeepSeek, analyzeCodeWithDeepSeek } from './deepseek.js';
 
 // Import shared types
-import { AIModelId, AIResponse, ProjectGenerationRequest, CodeGenerationRequest, ChatRequest, AIModel, PurchasedModel } from '../../shared/types.js';
+import { AIModelId, AIResponse, ProjectGenerationRequest, CodeGenerationRequest, ChatRequest, AIModel, PurchasedModel, FileChange } from '../../shared/types.js';
 
 // Use AIModelId instead of AIModel for type compatibility
 
@@ -55,22 +55,34 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
     }
 
     let content: string;
+    let fileChanges: FileChange[] = []; // Initialize fileChanges array
 
     switch (model) {
       case 'together':
-        content = await generateCodeWithTogether(instruction, context);
+        // Assume generateCodeWithTogether can now return an object with content and fileChanges
+        const togetherResult = await generateCodeWithTogether(instruction, context);
+        content = togetherResult.content;
+        fileChanges = togetherResult.fileChanges || [];
         break;
       case 'gemini':
-        content = await generateCodeWithGemini(instruction, context);
+        const geminiResult = await generateCodeWithGemini(instruction, context);
+        content = geminiResult.content;
+        fileChanges = geminiResult.fileChanges || [];
         break;
       case 'chatgpt':
-        content = await generateCodeWithChatGPT(instruction, context);
+        const chatgptResult = await generateCodeWithChatGPT(instruction, context);
+        content = chatgptResult.content;
+        fileChanges = chatgptResult.fileChanges || [];
         break;
       case 'claude':
-        content = await generateCodeWithClaude(instruction, context);
+        const claudeResult = await generateCodeWithClaude(instruction, context);
+        content = claudeResult.content;
+        fileChanges = claudeResult.fileChanges || [];
         break;
       case 'deepseek':
-        content = await generateCodeWithDeepSeek(instruction, context);
+        const deepseekResult = await generateCodeWithDeepSeek(instruction, context);
+        content = deepseekResult.content;
+        fileChanges = deepseekResult.fileChanges || [];
         break;
       default:
         throw new Error(`Unsupported AI model: ${model}`);
@@ -79,7 +91,8 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
     return {
       content,
       model,
-      timestamp: new Date()
+      timestamp: new Date(),
+      fileChanges // Include fileChanges in the response
     };
   } catch (error) {
     console.error('Error in generateCodeWithAI:', error);
@@ -99,22 +112,54 @@ export async function chatWithAIModel(request: ChatRequest): Promise<AIResponse>
     }
 
     let content: string;
+    let fileChanges: FileChange[] = []; // Initialize fileChanges array
+
+    // Construct the full prompt for the AI, including diagnostics if available
+    let fullMessage = message;
+    if (
+      projectContext &&
+      Array.isArray(projectContext.diagnostics) &&
+      projectContext.diagnostics.length > 0
+    ) {
+      const diagnosticsString = projectContext.diagnostics
+        .map((d: {
+          filePath: string;
+          lineNumber: number;
+          columnNumber: number;
+          severity: string;
+          message: string;
+        }) =>
+          `File: ${d.filePath}, Line: ${d.lineNumber}, Column: ${d.columnNumber}, Severity: ${d.severity}, Message: ${d.message}`
+        )
+        .join('\n');
+      fullMessage = `The user has provided the following request: "${message}".\n\nAdditionally, there are current diagnostics (errors/warnings) in the project that might need attention:\n${diagnosticsString}\n\nPlease address these in your response and provide any necessary file changes.`;
+    }
 
     switch (model) {
       case 'together':
-        content = await chatWithTogether(message, chatHistory);
+        const togetherChatResult = await chatWithTogether(fullMessage, chatHistory, projectContext);
+        content = togetherChatResult.content;
+        fileChanges = togetherChatResult.fileChanges || [];
         break;
       case 'gemini':
-        content = await chatWithGemini(message, chatHistory);
+        const geminiChatResult = await chatWithGemini(fullMessage, chatHistory, projectContext);
+        content = geminiChatResult.content;
+        fileChanges = geminiChatResult.fileChanges || [];
         break;
       case 'chatgpt':
-        content = await chatWithChatGPT(message, chatHistory);
+        const chatgptChatResult = await chatWithChatGPT(fullMessage, chatHistory, projectContext);
+        content = chatgptChatResult.content;
+        fileChanges = chatgptChatResult.fileChanges || [];
         break;
       case 'claude':
-        content = await chatWithClaude(message, chatHistory);
+        const claudeChatResult = await chatWithClaude(fullMessage, chatHistory, projectContext);
+        content = claudeChatResult.content;
+        fileChanges = claudeChatResult.fileChanges || [];
         break;
       case 'deepseek':
-        content = await chatWithDeepSeek(message, chatHistory);
+        const deepseekChatResult = await chatWithDeepSeek(fullMessage, chatHistory, projectContext);
+        content = deepseekChatResult.content;
+        fileChanges = deepseekChatResult.fileChanges || [];
         break;
       default:
         throw new Error(`Unsupported AI model: ${model}`);
@@ -125,7 +170,8 @@ export async function chatWithAIModel(request: ChatRequest): Promise<AIResponse>
     return {
       content,
       model,
-      timestamp: new Date()
+      timestamp: new Date(),
+      fileChanges // Include fileChanges in the response
     };
   } catch (error) {
     console.error('Error in chatWithAIModel:', error);

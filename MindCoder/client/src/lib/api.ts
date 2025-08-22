@@ -1,4 +1,5 @@
 import { apiRequest } from './queryClient';
+import { FileChange, Diagnostic } from '@shared/types'; // Import FileChange, Diagnostic from shared types
 
 export interface AuthResponse {
   token: string;
@@ -23,6 +24,7 @@ export interface AIResponse {
   content: string;
   model: string;
   timestamp: string;
+  fileChanges?: FileChange[]; // Add fileChanges to AIResponse
 }
 
 export interface ChatResponse {
@@ -124,7 +126,8 @@ export const aiApi = {
     return {
       content: data.content || data.response || data.message || 'No response generated',
       model: data.model || model,
-      timestamp: data.timestamp || new Date().toISOString()
+      timestamp: data.timestamp || new Date().toISOString(),
+      fileChanges: data.fileChanges || [] // Include fileChanges
     };
   },
 
@@ -139,7 +142,7 @@ export const aiApi = {
     model: string = 'together', 
     chatHistory?: any[], 
     projectContext?: any
-  ): Promise<string> => {
+  ): Promise<AIResponse> => { // Changed return type to AIResponse
     console.log('API: Sending chat request:', { message, model, hasHistory: !!chatHistory?.length, hasContext: !!projectContext });
     
     try {
@@ -165,7 +168,12 @@ export const aiApi = {
         throw new Error('No response content received from server');
       }
       
-      return content;
+      return {
+        content,
+        model: data.model || model,
+        timestamp: data.timestamp || new Date().toISOString(),
+        fileChanges: data.fileChanges || []
+      };
       
     } catch (error) {
       console.error('API: Chat request failed:', error);
@@ -185,7 +193,8 @@ export const aiApi = {
     return {
       content: data.content || data.response || data.message || 'No analysis generated',
       model: data.model || model,
-      timestamp: data.timestamp || new Date().toISOString()
+      timestamp: data.timestamp || new Date().toISOString(),
+      fileChanges: data.fileChanges || []
     };
   },
 
@@ -202,8 +211,29 @@ export const ideApi = {
     return response.json();
   },
 
-  runTerminalCommand: async (command: string, workingDirectory?: string): Promise<any> => {
-    const response = await apiRequest('POST', '/api/ide/terminal', { command, workingDirectory });
+  runTerminalCommand: async (command: string, workingDirectory?: string, sessionId?: string, input?: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ide/terminal', { command, workingDirectory, sessionId, input });
+    return response.json();
+  },
+
+  sendTerminalInput: async (sessionId: string, input: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ide/terminal/input', { sessionId, input });
+    return response.json();
+  },
+
+  getTerminalSession: async (sessionId: string): Promise<any> => {
+    const response = await apiRequest('GET', `/api/ide/terminal/session/${sessionId}`);
+    return response.json();
+  },
+
+  killTerminalSession: async (sessionId: string): Promise<any> => {
+    const response = await apiRequest('DELETE', `/api/ide/terminal/session/${sessionId}`);
+    return response.json();
+  },
+
+  // New function to apply file changes
+  applyFileChanges: async (fileChanges: FileChange[]): Promise<any> => {
+    const response = await apiRequest('POST', '/api/ide/apply-file-changes', { fileChanges });
     return response.json();
   },
 
@@ -215,6 +245,49 @@ export const ideApi = {
   getFiles: async (timestamp?: number): Promise<any[]> => {
     const url = timestamp ? `/api/ide/files?_t=${timestamp}` : '/api/ide/files';
     const response = await apiRequest('GET', url);
+    return response.json();
+  },
+
+  // New function to get diagnostics for a file
+  getDiagnostics: async (filePath: string): Promise<{ diagnostics: Diagnostic[] }> => {
+    const response = await apiRequest('POST', '/api/ide/diagnostics', { filePath });
+    return response.json();
+  }
+};
+
+// Collaboration API
+export const collaborationApi = {
+  createSession: async (projectId: string, sessionName: string, settings?: any): Promise<any> => {
+    const response = await apiRequest('POST', '/api/collaboration/create-session', { 
+      projectId, 
+      sessionName, 
+      settings 
+    });
+    return response.json();
+  },
+
+  getSession: async (sessionId: string): Promise<any> => {
+    const response = await apiRequest('GET', `/api/collaboration/session/${sessionId}`);
+    return response.json();
+  },
+
+  joinSession: async (inviteCode: string): Promise<any> => {
+    const response = await apiRequest('POST', '/api/collaboration/join-session', { inviteCode });
+    return response.json();
+  },
+
+  endSession: async (sessionId: string): Promise<any> => {
+    const response = await apiRequest('DELETE', `/api/collaboration/end-session/${sessionId}`);
+    return response.json();
+  },
+
+  getActiveSessions: async (): Promise<any> => {
+    const response = await apiRequest('GET', '/api/collaboration/active-sessions');
+    return response.json();
+  },
+
+  getSessionByInvite: async (inviteCode: string): Promise<any> => {
+    const response = await apiRequest('GET', `/api/collaboration/invite/${inviteCode}`);
     return response.json();
   }
 };

@@ -7,7 +7,7 @@ import { sendVerificationEmail, sendOTPVerificationEmail } from "./services/emai
 import { createMongoIdFilter } from './db.js';
 
 import { generateProjectWithAI, generateCodeWithAI, chatWithAIModel, analyzeCodeWithAI, getAvailableModels } from "./services/aiService.js";
-import { AIModelId as AIModel } from '../shared/types.js';
+import { AIModelId as AIModel, FileChange, Diagnostic } from '../shared/types.js'; // Import FileChange, Diagnostic
 import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
@@ -16,11 +16,21 @@ import { User } from '../shared/schema.js';
 import { connectToMongoDB } from './db.js';
 import { ObjectId } from 'mongodb';
 import { spawn, exec } from 'child_process';
-import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, promises as fs } from 'fs'; // Import promises as fs
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { getStorage, IStorage } from './storage.js';
+import { ESLint } from 'eslint'; // Import ESLint
+import path from 'path'; // Import the path module
+import { fileURLToPath } from 'url';
+import { statSync } from 'fs'; // Import statSync
+import CollaborationServer from './collaboration.js';
+import { CollaborationSession } from '../shared/types.js';
+
+// Determine __dirname in ES module context
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Add this interface definition near the top of the file, after the other interfaces
 interface UserCreate {
@@ -44,7 +54,26 @@ interface GitHubUserCreate {
   isVerified: boolean;
 }
 
+// Terminal session management
+interface TerminalSession {
+  id: string;
+  userId: string;
+  workingDirectory: string;
+  process: any;
+  inputQueue: string[];
+  outputBuffer: string[];
+  isActive: boolean;
+  createdAt: Date;
+}
+
+const terminalSessions = new Map<string, TerminalSession>();
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  const server = createServer(app);
+  
+  // Initialize collaboration server
+  const collaborationServer = new CollaborationServer(server);
+  
   // Session configuration
   app.use(session({
     secret: process.env.SESSION_SECRET || 'devmindx-session-secret',
@@ -181,14 +210,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new user
       const newUser = await storage.createUser({ username, email, password });
 
-      // Generate a verification token (e.g., UUID or a random string)
-      const verificationToken = uuidv4();
-      await storage.updateUser(newUser.id, { verificationToken });
+      // Generate OTP for verification
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      await storage.updateUser(newUser.id, { otp, otpExpiry });
 
-      // Send verification email
-      await sendVerificationEmail(newUser.email, verificationToken);
+      // Send OTP verification email
+      await sendOTPVerificationEmail(newUser.email, otp);
 
-      res.status(201).json({ message: 'User registered. Please check your email for verification.' });
+      res.status(201).json({ 
+        message: 'User registered. Please check your email for verification.', 
+        email: newUser.email 
+      });
     } catch (error: any) {
       console.error('Error during signup:', error);
       res.status(500).json({ message: error.message });
@@ -325,10 +358,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // OAuth routes
-  app.get('/api/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+  app.get('/api/auth/google', (req, res) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return res.redirect('/?error=oauth_not_configured&provider=google');
+    }
+    passport.authenticate('google', { scope: ['profile', 'email'] })(req, res);
+  });
   
   app.get('/api/auth/google/callback', 
-    passport.authenticate('google', { failureRedirect: '/?error=auth_failed' }),
+    (req, res, next) => {
+      if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.redirect('/?error=oauth_not_configured&provider=google');
+      }
+      passport.authenticate('google', { failureRedirect: '/?error=auth_failed' })(req, res, next);
+    },
     (req, res) => {
       const user = req.user as any;
       const token = generateToken(user);
@@ -336,10 +379,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
+  app.get('/api/auth/github', (req, res) => {
+    if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+      return res.redirect('/?error=oauth_not_configured&provider=github');
+    }
+    passport.authenticate('github', { scope: ['user:email'] })(req, res);
+  });
   
   app.get('/api/auth/github/callback',
-    passport.authenticate('github', { failureRedirect: '/?error=auth_failed' }),
+    (req, res, next) => {
+      if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+        return res.redirect('/?error=oauth_not_configured&provider=github');
+      }
+      passport.authenticate('github', { failureRedirect: '/?error=auth_failed' })(req, res, next);
+    },
     (req, res) => {
       const user = req.user as any;
       const token = generateToken(user);
@@ -838,56 +891,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Chat routes with better error handling
-
-// Get user's chat history
-app.get("/api/chat/history", authenticateToken, async (req: any, res) => {
-  try {
-    const userId = req.user.id;
-    const db = await connectToMongoDB(); // Keep direct DB connection for chat history
-    
-    // Get chat history from MongoDB
-    const chatHistory = await db.collection('chatHistory').findOne({ userId });
-    
-    if (chatHistory) {
-      res.json({ messages: chatHistory.messages || [] });
-    } else {
-      res.json({ messages: [] });
-    }
-  } catch (error: any) {
-    console.error('Get chat history error:', error);
-    res.status(500).json({ message: error.message || 'Failed to get chat history' });
-  }
-});
-
-// Clear user's chat history
-app.delete("/api/chat/history", authenticateToken, async (req: any, res) => {
-  try {
-    const userId = req.user.id;
-    const db = await connectToMongoDB(); // Keep direct DB connection for chat history
-    
-    // Delete chat history from MongoDB
-    await db.collection('chatHistory').deleteOne({ userId });
-    
-    res.json({ message: 'Chat history cleared successfully' });
-  } catch (error: any) {
-    console.error('Clear chat history error:', error);
-    res.status(500).json({ message: error.message || 'Failed to clear chat history' });
-  }
-});
-
-// Get project-specific chat session
-app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
-  try {
-    const storage = await getStorage(); // Add this line
-    const chatSession = await storage.getProjectChatSession(parseInt(req.params.projectId));
-    res.json(chatSession || { messages: [] });
-  } catch (error: any) {
-    console.error('Get chat error:', error);
-    res.status(500).json({ message: error.message || 'Failed to get chat session' });
-  }
-});
-
   // IDE-specific routes with better error handling
   app.post("/api/ide/files", authenticateToken, async (req: any, res) => {
     try {
@@ -940,6 +943,58 @@ app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
     }
   });
 
+  app.post("/api/ide/apply-file-changes", authenticateToken, async (req: any, res) => {
+    try {
+      const { fileChanges }: { fileChanges: FileChange[] } = req.body;
+      const userId = req.user.id;
+      const storage = await getStorage();
+
+      if (!fileChanges || !Array.isArray(fileChanges)) {
+        return res.status(400).json({ message: 'fileChanges array is required' });
+      }
+
+      const results = [];
+      for (const change of fileChanges) {
+        try {
+          const normalizedPath = change.filePath.startsWith('/workspace') ? change.filePath : `/workspace/${change.filePath.replace(/^\/+/, '')}`;
+          switch (change.action) {
+            case 'create':
+              const newFile = await storage.createFile({
+                userId,
+                path: normalizedPath,
+                content: change.newContent || '',
+                type: normalizedPath.endsWith('/') ? 'folder' : 'file' // Simple check for folder
+              });
+              results.push({ filePath: change.filePath, status: 'created', file: newFile });
+              break;
+            case 'update':
+              const updatedFile = await storage.updateFile(normalizedPath, { content: change.newContent });
+              results.push({ filePath: change.filePath, status: 'updated', file: updatedFile });
+              break;
+            case 'delete':
+              await storage.deleteFile(normalizedPath);
+              results.push({ filePath: change.filePath, status: 'deleted' });
+              break;
+            default:
+              results.push({ filePath: change.filePath, status: 'skipped', message: 'Invalid action' });
+          }
+        } catch (error) {
+          console.error(`Error applying file change for ${change.filePath}:`, error);
+          results.push({
+            filePath: change.filePath,
+            status: 'failed',
+            message: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+      res.json({ message: "File changes applied", results });
+    } catch (error) {
+      console.error('Apply file changes error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      res.status(500).json({ message: errorMessage });
+    }
+  });
+
   app.get("/api/ide/files", authenticateToken, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -984,66 +1039,180 @@ app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
     }
   });
 
-  // Enhanced terminal execution that works with real files
+  // New endpoint for fetching diagnostics
+  app.post("/api/ide/diagnostics", authenticateToken, async (req: any, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ message: "File path is required" });
+      }
+
+      const storage = await getStorage();
+      // Use getUserFiles to fetch the file by path, since getFileByPath does not exist
+      const files = await storage.getUserFiles(req.user.id, filePath);
+      const file = Array.isArray(files) ? files.find(f => f.path === filePath) : null;
+
+      if (!file) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      // Initialize ESLint
+      const eslint = new ESLint({
+        overrideConfigFile: path.resolve(__dirname, './.eslintrc.cjs'),
+        cwd: process.cwd(),
+      });
+
+      const results = await eslint.lintText(file.content, { filePath });
+
+      const formattedDiagnostics: Diagnostic[] = results.flatMap((result: any) =>
+        result.messages.map((message: any) => ({
+          filePath: filePath,
+          lineNumber: message.line,
+          columnNumber: message.column,
+          message: message.message,
+          severity: (
+            message.severity === 2 ? 'error' : message.severity === 1 ? 'warning' : 'info'
+          ) as 'error' | 'warning' | 'info',
+        }))
+      );
+
+      res.json({ diagnostics: formattedDiagnostics });
+    } catch (error) {
+      console.error('Get diagnostics error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      res.status(500).json({ message: errorMessage });
+    }
+  });
+
+  // Enhanced terminal execution that works with real files and supports interactive input
   app.post("/api/ide/terminal", authenticateToken, async (req: any, res) => {
     try {
-      const { command, workingDirectory } = req.body;
+      const { command, workingDirectory, sessionId, input } = req.body;
+      const userId = req.user.id;
       
-      const tempDir = join(tmpdir(), `devmindx-${uuidv4()}`);
-      mkdirSync(tempDir, { recursive: true });
+      // Handle interactive input for existing session
+      if (sessionId && input !== undefined) {
+        const session = terminalSessions.get(sessionId);
+        if (session && session.isActive && session.process) {
+          session.process.stdin.write(input + '\n');
+          return res.json({ success: true, message: 'Input sent to process' });
+        }
+      }
+      
+      // Create new session or use existing one
+      let session: TerminalSession;
+      if (sessionId && terminalSessions.has(sessionId)) {
+        session = terminalSessions.get(sessionId)!;
+        // Kill existing process if it's still running
+        if (session.process && session.isActive) {
+          session.process.kill();
+        }
+      } else {
+        const newSessionId = uuidv4();
+        session = {
+          id: newSessionId,
+          userId,
+          workingDirectory: workingDirectory || join(tmpdir(), `devmindx-${userId}`),
+          process: null,
+          inputQueue: [],
+          outputBuffer: [],
+          isActive: false,
+          createdAt: new Date()
+        };
+        terminalSessions.set(newSessionId, session);
+      }
+      
+      // Ensure working directory exists
+      if (!existsSync(session.workingDirectory)) {
+        mkdirSync(session.workingDirectory, { recursive: true });
+      }
       
       let result = '';
       let error = '';
       
-      if (command.startsWith('npm install') || command.startsWith('npm i')) {
-        const process = spawn('npm', ['install'], { 
-          cwd: tempDir,
-          shell: true 
-        });
-        
-        await new Promise<void>((resolve, reject) => {
-          process.stdout.on('data', (data) => {
-            result += data.toString();
-          });
-          
-          process.stderr.on('data', (data) => {
-            error += data.toString();
-          });
-          
-          process.on('close', (code) => {
-            if (code !== 0) {
-              reject(new Error(error || `npm install failed with code ${code}`));
-            } else {
-              resolve();
-            }
-          });
-        });
-      } else {
-        const process = spawn(command, {
-          cwd: tempDir,
-          shell: true
-        });
-        
-        await new Promise<void>((resolve, reject) => {
-          process.stdout.on('data', (data) => {
-            result += data.toString();
-          });
-          
-          process.stderr.on('data', (data) => {
-            error += data.toString();
-          });
-          
-          process.on('close', (code) => {
-            if (code !== 0) {
-              reject(new Error(error || `Command failed with code ${code}`));
-            } else {
-              resolve();
-            }
-          });
+      // Handle special commands
+      if (command === 'clear') {
+        session.outputBuffer = [];
+        return res.json({ 
+          output: '', 
+          exitCode: 0, 
+          sessionId: session.id,
+          workingDirectory: session.workingDirectory 
         });
       }
       
-      res.json({ output: result, exitCode: 0 });
+      if (command.startsWith('cd ')) {
+        const newPath = command.substring(3).trim();
+        const targetPath = newPath === '~' ? 
+          join(process.env.HOME || process.env.USERPROFILE || '') :
+          join(session.workingDirectory, newPath);
+        
+        if (existsSync(targetPath) && statSync(targetPath).isDirectory()) {
+          session.workingDirectory = targetPath;
+          return res.json({ 
+            output: `Changed directory to ${session.workingDirectory}`, 
+            exitCode: 0, 
+            sessionId: session.id,
+            workingDirectory: session.workingDirectory 
+          });
+        } else {
+          return res.json({ 
+            error: `Directory not found: ${newPath}`, 
+            exitCode: 1, 
+            sessionId: session.id,
+            workingDirectory: session.workingDirectory 
+          });
+        }
+      }
+      
+      // Execute command
+              const childProcess = spawn(command, {
+          cwd: session.workingDirectory,
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        
+        session.process = childProcess;
+      session.isActive = true;
+      
+      // Handle real-time output
+      process.stdout.on('data', (data) => {
+        const output = data.toString();
+        result += output;
+        session.outputBuffer.push(output);
+      });
+      
+      process.stderr.on('data', (data) => {
+        const errorOutput = data.toString();
+        error += errorOutput;
+        session.outputBuffer.push(errorOutput);
+      });
+      
+      // Handle process completion
+      await new Promise<void>((resolve, reject) => {
+        process.on('close', (code) => {
+          session.isActive = false;
+          if (code !== 0 && error) {
+            reject(new Error(error || `Command failed with code ${code}`));
+          } else {
+            resolve();
+          }
+        });
+        
+        process.on('error', (err) => {
+          session.isActive = false;
+          reject(err);
+        });
+      });
+      
+      res.json({ 
+        output: result, 
+        error: error || undefined,
+        exitCode: 0, 
+        sessionId: session.id,
+        workingDirectory: session.workingDirectory 
+      });
+      
     } catch (err) {
       res.status(500).json({ 
         error: err instanceof Error ? err.message : 'Command execution failed',
@@ -1051,6 +1220,91 @@ app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
       });
     }
   });
+
+  // Endpoint to send input to an active terminal session
+  app.post("/api/ide/terminal/input", authenticateToken, async (req: any, res) => {
+    try {
+      const { sessionId, input } = req.body;
+      const userId = req.user.id;
+      
+      const session = terminalSessions.get(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      if (!session.isActive || !session.process) {
+        return res.status(400).json({ error: 'Session is not active' });
+      }
+      
+      session.process.stdin.write(input + '\n');
+      res.json({ success: true, message: 'Input sent to process' });
+      
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to send input' });
+    }
+  });
+
+  // Endpoint to get session status and output
+  app.get("/api/ide/terminal/session/:sessionId", authenticateToken, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.user.id;
+      
+      const session = terminalSessions.get(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      res.json({
+        sessionId: session.id,
+        workingDirectory: session.workingDirectory,
+        isActive: session.isActive,
+        outputBuffer: session.outputBuffer,
+        createdAt: session.createdAt
+      });
+      
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to get session status' });
+    }
+  });
+
+  // Endpoint to kill a terminal session
+  app.delete("/api/ide/terminal/session/:sessionId", authenticateToken, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.user.id;
+      
+      const session = terminalSessions.get(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      if (session.process && session.isActive) {
+        session.process.kill();
+      }
+      
+      terminalSessions.delete(sessionId);
+      res.json({ success: true, message: 'Session terminated' });
+      
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to terminate session' });
+    }
+  });
+
+  // Cleanup old sessions periodically
+  setInterval(() => {
+    const now = new Date();
+    const maxAge = 30 * 60 * 1000; // 30 minutes
+    
+    for (const [sessionId, session] of terminalSessions.entries()) {
+      if (now.getTime() - session.createdAt.getTime() > maxAge) {
+        if (session.process && session.isActive) {
+          session.process.kill();
+        }
+        terminalSessions.delete(sessionId);
+      }
+    }
+  }, 5 * 60 * 1000); // Check every 5 minutes
 
   // Real code execution endpoint with enhanced support
   app.post("/api/ide/run", authenticateToken, async (req, res) => {
@@ -1205,6 +1459,235 @@ app.get("/api/chat/:projectId", authenticateToken, async (req: any, res) => {
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  // Collaboration API endpoints
+  app.post("/api/collaboration/create-session", authenticateToken, async (req: any, res) => {
+    try {
+      const { projectId, sessionName, settings } = req.body;
+      const userId = req.user.id;
+      const username = req.user.username;
+
+      // Create collaboration invite with matching session ID
+      const inviteCode = uuidv4().substring(0, 8).toUpperCase();
+      const sessionId = inviteCode; // Use invite code as session ID for easy lookup
+      
+      // Create the actual session in the collaboration server
+      const session = {
+        id: sessionId,
+        projectId: projectId || 'default-project',
+        hostUserId: userId,
+        hostUsername: username,
+        sessionName: sessionName || 'Collaboration Session',
+        isActive: true,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        maxParticipants: 10,
+        participants: [{
+          userId,
+          username,
+          email: req.user.email || '',
+          joinedAt: new Date(),
+          isOnline: true,
+          lastActivity: new Date(),
+          color: '#FF6B6B'
+        }],
+        settings: {
+          allowFileEditing: true,
+          allowChat: true,
+          allowUserKick: true,
+          requireApproval: false,
+          autoSave: true,
+          ...settings
+        }
+      };
+
+      // Store the session in the collaboration server
+      collaborationServer.createSession(session);
+
+      const invite = {
+        id: uuidv4(),
+        sessionId: sessionId,
+        inviteCode,
+        hostUserId: userId,
+        hostUsername: username,
+        projectName: sessionName || 'Collaboration Session',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        maxUses: 10,
+        currentUses: 0
+      };
+
+      res.json({
+        success: true,
+        invite,
+        collaborationUrl: `${req.protocol}://${req.get('host')}/collaborate/${invite.inviteCode}`,
+        inviteCode: invite.inviteCode,
+        sessionId: invite.sessionId
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to create collaboration session' 
+      });
+    }
+  });
+
+  app.get("/api/collaboration/session/:sessionId", authenticateToken, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const session = collaborationServer.getSession(sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Session not found' });
+      }
+
+      res.json({ success: true, session });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to get session' 
+      });
+    }
+  });
+
+  app.post("/api/collaboration/join-session", authenticateToken, async (req: any, res) => {
+    try {
+      const { inviteCode } = req.body;
+      const userId = req.user.id;
+      const username = req.user.username;
+      const email = req.user.email;
+
+      // Find session by invite code (session ID matches invite code)
+      const session = collaborationServer.getSession(inviteCode);
+
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Invalid invite code' });
+      }
+
+      if (!session.isActive) {
+        return res.status(400).json({ success: false, error: 'Session is not active' });
+      }
+
+      // Check if user is already a participant
+      const existingParticipant = session.participants.find((p: any) => p.userId === userId);
+      if (existingParticipant) {
+        // Update existing participant status
+        existingParticipant.isOnline = true;
+        existingParticipant.lastActivity = new Date();
+      } else {
+        // Add new participant
+        const userColor = collaborationServer.getUserColor(userId);
+        const participant = {
+          userId,
+          username,
+          email: email || '',
+          joinedAt: new Date(),
+          isOnline: true,
+          lastActivity: new Date(),
+          color: userColor
+        };
+        session.participants.push(participant);
+      }
+
+      res.json({ success: true, session });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to join session' 
+      });
+    }
+  });
+
+  app.delete("/api/collaboration/end-session/:sessionId", authenticateToken, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.user.id;
+
+      const session = collaborationServer.getSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Session not found' });
+      }
+
+      if (session.hostUserId !== userId) {
+        return res.status(403).json({ success: false, error: 'Only the host can end the session' });
+      }
+
+      const success = collaborationServer.endSession(sessionId);
+      res.json({ success });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to end session' 
+      });
+    }
+  });
+
+  app.get("/api/collaboration/active-sessions", authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const activeSessions = collaborationServer.getActiveSessions();
+      
+      // Filter sessions where user is host or participant
+      const userSessions = activeSessions.filter(session => 
+        session.hostUserId === userId || 
+        session.participants.some((p: any) => p.userId === userId)
+      );
+
+      res.json({ success: true, sessions: userSessions });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to get active sessions' 
+      });
+    }
+  });
+
+  // Handle collaboration invite links
+  app.get("/collaborate/:inviteCode", async (req: any, res) => {
+    try {
+      const { inviteCode } = req.params;
+      
+      // Redirect to the main page with the invite code and logout parameter
+      res.redirect(`/?invite=${inviteCode}&logout=true`);
+    } catch (error) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'Invalid collaboration link' 
+      });
+    }
+  });
+
+  // Get session info by invite code (for joining)
+  app.get("/api/collaboration/invite/:inviteCode", async (req: any, res) => {
+    try {
+      const { inviteCode } = req.params;
+      
+      // Find session by invite code
+      const activeSessions = collaborationServer.getActiveSessions();
+      const session = activeSessions.find(s => s.id === inviteCode);
+
+      if (!session) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Invalid invite code or session not found' 
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        session: {
+          id: session.id,
+          sessionName: session.sessionName,
+          hostUsername: session.hostUsername,
+          participants: session.participants.length,
+          maxParticipants: session.maxParticipants
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to get session info' 
+      });
+    }
+  });
+
+  return server;
 }

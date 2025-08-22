@@ -243,7 +243,6 @@ This project is licensed under the MIT License.
 ## 🔮 Roadmap
 
 ### Upcoming Features
-- **Real-time collaboration**: Multi-user editing
 - **Git integration**: Built-in version control
 - **Deployment tools**: One-click deployment
 - **Advanced AI**: More sophisticated code generation

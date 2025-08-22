@@ -1,6 +1,6 @@
 import { users, projects, chatSessions, type User, type InsertUser, type Project, type InsertProject, type ChatSession, type InsertChatSession } from "@shared/schema.js";
 import { connectToMongoDB } from './db.js';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Document, OptionalId } from 'mongodb';
 import path from 'path';
 import { PurchasedModel } from "../shared/types.js";
 
@@ -708,5 +708,14 @@ const storagePromise = initializeStorage().catch(error => {
   return storage;
 });
 
-// Export a promise that resolves to the storage instance
-// export { storagePromise as storage }; // REMOVED: This export is causing issues due to direct promise use
+
+
+
+
+
+
+
+
+
+
+

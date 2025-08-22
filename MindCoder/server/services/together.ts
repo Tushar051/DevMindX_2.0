@@ -1,5 +1,6 @@
 import Together from 'together-ai';
 import JSON5 from 'json5'; 
+import { FileChange } from '@shared/types.js';
 
 if (!process.env.TOGETHER_API_KEY) {
   console.warn('TOGETHER_API_KEY is not set. AI features will not work.');
@@ -12,7 +13,7 @@ const together = new Together({
 const SYSTEM_PROMPT = {
   role: 'system',
   content:
-    'You are a concise programming assistant. Respond briefly. Avoid examples or code unless explicitly asked. Do not repeat the question.',
+    'You are a concise programming assistant. Respond briefly. Avoid examples or code unless explicitly asked. Do not repeat the question. If you are given diagnostic information (errors, warnings), prioritize addressing them by providing an updated file content. When suggesting code changes, provide a JSON object with a \'fileChanges\' array, where each object in the array has \'filePath\', \'action\' (create, update, or delete), and \'newContent\' (if action is create or update). If no specific file changes are needed, or if the response is purely conversational, return a simple text response. When providing file changes, ensure the content is complete and syntactically correct, including all necessary imports and surrounding code context.',
 };
 
 // --- 1. Generate Full Project Code ---
@@ -105,7 +106,7 @@ Do not include any markdown explanations or extra commentary. Just return the ra
 }
 
 // --- 2. Generate Code Snippet ---
-export async function generateCodeWithTogether(instruction: string, context?: string): Promise<string> {
+export async function generateCodeWithTogether(instruction: string, context?: string): Promise<{ content: string; fileChanges?: FileChange[] }> {
   try {
     if (!process.env.TOGETHER_API_KEY) throw new Error('TOGETHER_API_KEY is not configured');
 
@@ -125,7 +126,7 @@ export async function generateCodeWithTogether(instruction: string, context?: st
 
     const content = response.choices?.[0]?.message?.content?.trim();
     if (!content) throw new Error('No response from Together AI');
-    return content;
+    return { content, fileChanges: [] };
 
   } catch (error) {
     console.error('Error in generateCodeWithTogether:', error);
@@ -136,8 +137,9 @@ export async function generateCodeWithTogether(instruction: string, context?: st
 // --- 3. Chat With the AI ---
 export async function chatWithTogether(
   message: string,
-  chatHistory: { role: 'user' | 'assistant'; content: string }[] = []
-): Promise<string> {
+  chatHistory: { role: 'user' | 'assistant'; content: string }[] = [],
+  projectContext?: any // Added projectContext parameter
+): Promise<{ content: string; fileChanges?: FileChange[] }> {
   try {
     if (!process.env.TOGETHER_API_KEY) throw new Error('TOGETHER_API_KEY is not configured');
 
@@ -160,16 +162,30 @@ export async function chatWithTogether(
 
     const content = response.choices?.[0]?.message?.content?.trim();
     if (!content) throw new Error('No response from Together AI');
-    return content;
+
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```|(\{[\s\S]*\})/);
+    if (jsonMatch) {
+      const jsonString = jsonMatch[1] || jsonMatch[2];
+      try {
+        const parsedContent = JSON5.parse(jsonString);
+        if (parsedContent && typeof parsedContent === 'object' && parsedContent.fileChanges) {
+          return { content: parsedContent.content || '', fileChanges: parsedContent.fileChanges };
+        }
+      } catch (parseError) {
+        console.log('AI response contained JSON but failed to parse or was not expected structure. Treating as plain text.', parseError);
+      }
+    }
+
+    return { content, fileChanges: [] };
 
   } catch (error) {
     console.error('Error in chatWithTogether:', error);
     if (error instanceof Error) {
-      if (error.message.includes('API key')) return 'AI service not configured.';
-      if (error.message.includes('rate limit')) return 'Service is rate-limited. Try again later.';
-      return `Error: ${error.message}`;
+      if (error.message.includes('API key')) return { content: 'AI service not configured.', fileChanges: [] };
+      if (error.message.includes('rate limit')) return { content: 'Service is rate-limited. Try again later.', fileChanges: [] };
+      return { content: `Error: ${error.message}`, fileChanges: [] };
     }
-    return 'Unexpected error occurred.';
+    return { content: 'Unexpected error occurred.', fileChanges: [] };
   }
 }
 

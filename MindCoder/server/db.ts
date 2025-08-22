@@ -10,7 +10,7 @@ neonConfig.webSocketConstructor = ws;
 let pool, db;
 if (process.env.DATABASE_URL) {
   pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  db = drizzle({ client: pool, schema });
+  db = drizzle({ client: pool, schema: { ...schema } });
 } else {
   console.warn('DATABASE_URL not set. Skipping Postgres/Neon connection. Only MongoDB will be used.');
 }
