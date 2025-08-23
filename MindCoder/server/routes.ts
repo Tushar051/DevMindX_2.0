@@ -143,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
         if (user) {
           if (!user.googleId) {
-            await storage.updateUser(Number(user.id), { googleId: profile.id, isVerified: true });
+            await storage.updateUser(user.id, { googleId: profile.id, isVerified: true });
             user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
         } else {
@@ -175,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
         if (user) {
           if (!user.githubId) {
-            await storage.updateUser(Number(user.id), { githubId: profile.id, isVerified: true });
+            await storage.updateUser(user.id, { githubId: profile.id, isVerified: true });
             user = await storage.getUserByEmail(profile.emails?.[0]?.value || '');
           }
         } else {
@@ -293,11 +293,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "OTP has expired. Please request a new one." });
       }
       
-      await storage.updateUser(Number(user.id), {
+      await storage.updateUser(user.id, {
         isVerified: true,
         otp: null,
         otpExpiry: null
       });
+
+      // Update local user object to reflect changes
+      user.isVerified = true;
+      user.otp = null;
+      user.otpExpiry = null;
       
       const token = generateToken({
         ...user,
