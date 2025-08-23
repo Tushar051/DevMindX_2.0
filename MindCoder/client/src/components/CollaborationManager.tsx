@@ -108,6 +108,7 @@ export default function CollaborationManager({
         setSession(response.session);
         setIsCollaborating(true);
         setIsHost(false);
+        console.log('[Client] Session joined:', response.session);
         setShowJoinDialog(false);
         connectWebSocket();
         toast({
@@ -153,7 +154,7 @@ export default function CollaborationManager({
   const connectWebSocket = () => {
     if (!session || !user) return;
 
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws-collaboration`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -200,6 +201,7 @@ export default function CollaborationManager({
   };
 
   const handleWebSocketMessage = (message: any) => {
+    console.log('[Client] Received WebSocket message:', message);
     const { type, data } = message;
 
     switch (type) {
@@ -227,12 +229,10 @@ export default function CollaborationManager({
         }]);
         break;
 
-      case 'chat-message':
-        setChatMessages(prev => [...prev, data]);
-        break;
 
       case 'file-changed':
         setFileChanges(prev => [data, ...prev.slice(0, 9)]);
+        console.log('[Client] File change received:', data);
         break;
 
       case 'session-ended':
@@ -241,6 +241,7 @@ export default function CollaborationManager({
         setParticipants([]);
         setChatMessages([]);
         setFileChanges([]);
+        console.log('[Client] Session ended.');
         break;
     }
   };
@@ -289,6 +290,52 @@ export default function CollaborationManager({
     };
   }, []);
 
+  // Polling for session status and chat messages every second
+  useEffect(() => {
+  let interval: NodeJS.Timeout | null = null;
+  
+  if (isCollaborating && session) {
+    const pollSession = async () => {
+      try {
+        const sessionData = await collaborationApi.getSession(session.id);
+        if (!sessionData) {
+          // Session ended
+          setIsCollaborating(false);
+          setSession(null);
+          setParticipants([]);
+          setChatMessages([]);
+          setFileChanges([]);
+          toast({ title: 'Session Ended', description: 'The collaboration session has ended.' });
+          return;
+        }
+
+        const messages = await collaborationApi.getSessionMessages(session.id);
+        setChatMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const newMessages = messages.filter(m => !existingIds.has(m.id))
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          return [...prev, ...newMessages];
+        });
+      } catch (error) {
+        console.error('Polling error:', error);
+        if (error instanceof Error && (error.message.includes('404') || error.message.includes('Unauthorized'))) {
+          setIsCollaborating(false);
+          setSession(null);
+          toast({ title: 'Session Error', description: 'Session no longer available.', variant: 'destructive' });
+        }
+      }
+    };
+    
+    pollSession(); // Initial poll
+    interval = setInterval(pollSession, 1000);
+  }
+  
+  return () => {
+    if (interval) {
+      clearInterval(interval);
+    }
+  };
+}, [isCollaborating, session]);
   if (!isAuthenticated) {
     return null;
   }
@@ -464,7 +511,7 @@ export default function CollaborationManager({
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Type a message..."
-                    onKeyPress={(e) => {
+                    onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         sendChatMessage();
                       }

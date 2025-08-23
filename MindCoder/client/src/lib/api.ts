@@ -289,5 +289,10 @@ export const collaborationApi = {
   getSessionByInvite: async (inviteCode: string): Promise<any> => {
     const response = await apiRequest('GET', `/api/collaboration/invite/${inviteCode}`);
     return response.json();
+  },
+
+  getSessionMessages: async (sessionId: string): Promise<any[]> => {
+    const response = await apiRequest('GET', `/api/collaboration/sessions/${sessionId}/messages`);
+    return response.json();
   }
 };
