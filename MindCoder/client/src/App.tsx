@@ -6,17 +6,19 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import IDE from "@/pages/ide";
+import { useEffect } from 'react';
+import { useCollab } from '@/hooks/use-collab';
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
 import Projects from "@/pages/projects";
 import NotFound from "@/pages/not-found";
 import AccountSettings from "@/pages/account";
-import { useEffect } from 'react';
 
 function AppContent() {
   const { isAuthenticated, login } = useAuth();
   const [location, setLocation] = useLocation();
+  const collab = useCollab();
 
   // Check for OAuth errors and OAuth success in URL
   useEffect(() => {
@@ -63,6 +65,17 @@ function AppContent() {
       setLocation('/');
     }
   }, [isAuthenticated, location, setLocation]);
+
+  // Handle deep link join: /#/collab/:sessionId
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const match = hash.match(/#\/collab\/([^/?#]+)/);
+    if (match && isAuthenticated) {
+      const sessionId = match[1];
+      collab.joinSession(sessionId);
+      setLocation('/ide');
+    }
+  }, [isAuthenticated, setLocation]);
 
   return (
     <Switch>

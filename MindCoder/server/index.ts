@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from 'http';
 import { registerRoutes } from './routes.js';
 import { setupVite, serveStatic, log } from "./vite.js";
+import { setupCollaborationSockets } from "./realtime/collab.ts";
 import { connectToMongoDB } from './db.js';
 
 const app = express();
@@ -76,6 +77,9 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
   httpServer.listen(port, '0.0.0.0', () => {
     log(`serving on port ${port}`);
   });
+
+  // Attach Socket.IO realtime collaboration
+  setupCollaborationSockets(httpServer);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

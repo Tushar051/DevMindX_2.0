@@ -73,6 +73,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { cn, getLanguageFromFileName } from '@/lib/utils';
 import { ideApi } from '@/lib/api';
+import { useCollab } from '@/hooks/use-collab';
 
 // Types
 interface FileNode {
@@ -219,6 +220,11 @@ func main() {
 
 export default function IDE() {
   const { isAuthenticated, logout } = useAuth();
+  const { sessionId: collabSessionId, participants, messages: collabMessages, joinSession, sendMessage } = useCollab();
+  const [inviteCode, setInviteCode] = useState<string>('');
+  const [joinCode, setJoinCode] = useState<string>('');
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -1685,6 +1691,59 @@ export default function IDE() {
                 <Brain className="w-4 h-4 mr-2" />
                 AI Assistant
               </Button>
+              {!collabSessionId ? (
+                <>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    try {
+                      setCreating(true);
+                      const res = await fetch('/api/collab/create', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+                        },
+                        body: JSON.stringify({}),
+                      });
+                      if (!res.ok) throw new Error('Failed to create');
+                      const data = await res.json();
+                      setInviteCode(data.inviteCode);
+                      joinSession(data.sessionId);
+                      try { await navigator.clipboard.writeText(data.joinLink); } catch {}
+                    } finally {
+                      setCreating(false);
+                    }
+                  }} disabled={creating}>
+                    {creating ? 'Creating…' : 'Start Collaboration'}
+                  </Button>
+                  <div className="flex items-center space-x-2">
+                    <Input placeholder="Enter code" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="h-8 w-32" />
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      if (!joinCode.trim()) return;
+                      try {
+                        setJoining(true);
+                        const res = await fetch('/api/collab/join', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+                          },
+                          body: JSON.stringify({ code: joinCode.trim() }),
+                        });
+                        if (!res.ok) throw new Error('Invalid code');
+                        const data = await res.json();
+                        joinSession(data.sessionId);
+                      } finally {
+                        setJoining(false);
+                      }
+                    }} disabled={joining}>Join</Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  {inviteCode ? (<Badge variant="secondary">Code: {inviteCode}</Badge>) : null}
+                  <Badge>In Session</Badge>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -1829,7 +1888,7 @@ export default function IDE() {
 
           {/* Editor */}
           <ResizablePanel defaultSize={60} minSize={40}>
-            <div className="flex flex-col h-full">
+              <div className="flex flex-col h-full">
               {/* Tabs */}
               {openFiles.length > 0 && (
                 <div className="bg-gray-800 border-b border-gray-700 flex items-center">
@@ -1925,6 +1984,75 @@ export default function IDE() {
                   </motion.div>
                 )}
               </div>
+              {collabSessionId ? (
+                <div className="border-t border-gray-700 p-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <Card className="bg-gray-800 border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-gray-200">Participants</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-col gap-2">
+                          {participants.map(p => (
+                            <div key={p.userId} className="flex items-center gap-2">
+                              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: p.color }} />
+                              <span className="text-sm text-gray-300">{p.username || p.userId}</span>
+                            </div>
+                          ))}
+                          {participants.length === 0 && (
+                            <div className="text-xs text-gray-500">No participants</div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-800 border-gray-700 col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-gray-200">Collab Chat</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-col h-48">
+                          <ScrollArea className="flex-1 border border-gray-700 rounded p-2">
+                            <div className="space-y-2">
+                              {collabMessages.map((m, idx) => (
+                                <div key={idx} className="text-sm text-gray-200">
+                                  <span className="font-medium text-gray-100">{m.username || m.userId}:</span> {m.text}
+                                </div>
+                              ))}
+                              {collabMessages.length === 0 && (
+                                <div className="text-xs text-gray-500">No messages yet</div>
+                              )}
+                            </div>
+                          </ScrollArea>
+                          <div className="mt-2 flex gap-2">
+                            <Input placeholder="Type a message" onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                const target = e.target as HTMLInputElement;
+                                const text = target.value;
+                                if (text.trim()) {
+                                  sendMessage(text);
+                                  target.value = '';
+                                }
+                              }
+                            }} />
+                            <Button size="sm" variant="outline" onClick={() => {
+                              const inputs = document.querySelectorAll('input');
+                              const last = inputs[inputs.length - 1] as HTMLInputElement | undefined;
+                              if (last) {
+                                const text = last.value;
+                                if (text.trim()) {
+                                  sendMessage(text);
+                                  last.value = '';
+                                }
+                              }
+                            }}>Send</Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </ResizablePanel>
 

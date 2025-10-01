@@ -21,6 +21,8 @@ import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { getStorage, IStorage } from './storage.js';
+import { createSession, getSession } from './realtime/collab.ts';
+import { nanoid } from 'nanoid';
 import { ESLint } from 'eslint'; // Import ESLint
 import path from 'path'; // Import the path module
 import { fileURLToPath } from 'url';
@@ -270,6 +272,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
       res.status(401).json({ message: errorMessage });
     }
+  });
+
+  // Collaboration REST endpoints
+  const inviteCodeToSessionId = new Map<string, string>();
+
+  app.post('/api/collab/create', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (!token) return res.status(401).json({ message: 'Missing token' });
+      const { verifyToken } = await import('./services/auth.js');
+      const payload: any = verifyToken(token);
+
+      const { sessionName } = req.body || {};
+      const sessionId = nanoid(10);
+      createSession(sessionId, payload.id, payload.username);
+
+      const inviteCode = nanoid(6).toUpperCase();
+      inviteCodeToSessionId.set(inviteCode, sessionId);
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const joinLink = `${baseUrl}/#/collab/${sessionId}`;
+      res.json({ sessionId, inviteCode, joinLink, sessionName: sessionName || null });
+    } catch (err: any) {
+      res.status(401).json({ message: 'Unauthorized' });
+    }
+  });
+
+  app.post('/api/collab/join', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (!token) return res.status(401).json({ message: 'Missing token' });
+      const { verifyToken } = await import('./services/auth.js');
+      const payload: any = verifyToken(token);
+
+      const { code, sessionId } = req.body || {};
+      let resolvedSessionId: string | undefined = sessionId;
+      if (!resolvedSessionId && code) {
+        resolvedSessionId = inviteCodeToSessionId.get(String(code).toUpperCase());
+      }
+      if (!resolvedSessionId) return res.status(404).json({ message: 'Session not found' });
+
+      const session = getSession(resolvedSessionId);
+      if (!session) return res.status(404).json({ message: 'Session not found' });
+
+      // ensure session exists and user can proceed to connect via sockets
+      res.json({ sessionId: resolvedSessionId });
+    } catch (err: any) {
+      res.status(401).json({ message: 'Unauthorized' });
+    }
+  });
+
+  app.get('/api/collab/session/:id', async (req, res) => {
+    const session = getSession(req.params.id);
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+    const participants = Array.from(session.participants.values());
+    res.json({ sessionId: session.sessionId, hostUserId: session.hostUserId, participants });
   });
 
   app.get("/api/auth/verify", async (req, res) => {
