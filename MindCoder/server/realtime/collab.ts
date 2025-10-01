@@ -112,6 +112,22 @@ export function setupCollaborationSockets(httpServer: HttpServer): Server {
       });
     });
 
+    socket.on("collab:end", async ({ sessionId }: { sessionId: string }) => {
+      if (!sessionId) return;
+      const session = sessions.get(sessionId);
+      if (!session) return;
+      if (session.hostUserId !== user.id) return; // only host can end
+
+      io.to(sessionId).emit("collab:ended", { sessionId });
+      try {
+        const sockets = await io.in(sessionId).fetchSockets();
+        for (const s of sockets) {
+          s.leave(sessionId);
+        }
+      } catch {}
+      sessions.delete(sessionId);
+    });
+
     socket.on("disconnect", () => {
       for (const session of sessions.values()) {
         if (session.participants.has(user.id)) {

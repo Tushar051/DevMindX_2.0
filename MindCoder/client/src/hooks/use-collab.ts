@@ -22,6 +22,7 @@ export function useCollab() {
   const [participants, setParticipants] = useState<CollabParticipant[]>([]);
   const [messages, setMessages] = useState<CollabMessage[]>([]);
   const [connected, setConnected] = useState(false);
+  const [hostUserId, setHostUserId] = useState<string | null>(null);
 
   const connect = useCallback(() => {
     if (socketRef.current) return socketRef.current;
@@ -34,9 +35,16 @@ export function useCollab() {
 
     socket.on('collab:roster', (evt: RosterEvent) => {
       setParticipants(evt.participants || []);
+      setHostUserId(evt.hostUserId || null);
     });
     socket.on('collab:message', (msg: CollabMessage) => {
       setMessages(prev => [...prev, msg]);
+    });
+    socket.on('collab:ended', () => {
+      setSessionId(null);
+      setParticipants([]);
+      setMessages([]);
+      setHostUserId(null);
     });
 
     return socket;
@@ -51,6 +59,11 @@ export function useCollab() {
   const sendMessage = useCallback((text: string) => {
     if (!sessionId || !socketRef.current || !text.trim()) return;
     socketRef.current.emit('collab:message', { sessionId, text });
+  }, [sessionId]);
+
+  const endSession = useCallback(() => {
+    if (!sessionId || !socketRef.current) return;
+    socketRef.current.emit('collab:end', { sessionId });
   }, [sessionId]);
 
   useEffect(() => {
@@ -69,6 +82,8 @@ export function useCollab() {
     messages,
     joinSession,
     sendMessage,
+    endSession,
+    hostUserId,
     setSessionId,
   };
 }

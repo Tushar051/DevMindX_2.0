@@ -220,7 +220,7 @@ func main() {
 
 export default function IDE() {
   const { isAuthenticated, logout } = useAuth();
-  const { sessionId: collabSessionId, participants, messages: collabMessages, joinSession, sendMessage } = useCollab();
+  const { sessionId: collabSessionId, participants, messages: collabMessages, joinSession, sendMessage, endSession, hostUserId } = useCollab();
   const [inviteCode, setInviteCode] = useState<string>('');
   const [joinCode, setJoinCode] = useState<string>('');
   const [creating, setCreating] = useState(false);
@@ -1742,6 +1742,19 @@ export default function IDE() {
                 <div className="flex items-center space-x-2">
                   {inviteCode ? (<Badge variant="secondary">Code: {inviteCode}</Badge>) : null}
                   <Badge>In Session</Badge>
+                  {/* End session only visible if current user is host */}
+                  {/* We don't have user id here; rely on server roster hostUserId and localStorage user */}
+                  {(() => {
+                    try {
+                      const me = JSON.parse(localStorage.getItem('devmindx_user') || 'null');
+                      if (me && hostUserId && String(me.id) === String(hostUserId)) {
+                        return (
+                          <Button size="sm" variant="destructive" onClick={() => endSession()}>End Session</Button>
+                        );
+                      }
+                    } catch {}
+                    return null;
+                  })()}
                 </div>
               )}
             </div>
