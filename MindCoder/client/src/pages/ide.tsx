@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ResizablePanel, ResizablePanelGroup, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
@@ -73,7 +73,6 @@ import rehypeHighlight from 'rehype-highlight';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { cn, getLanguageFromFileName } from '@/lib/utils';
 import { ideApi } from '@/lib/api';
-import CollaborationButton from '@/components/CollaborationButton';
 
 // Types
 interface FileNode {
@@ -1686,11 +1685,6 @@ export default function IDE() {
                 <Brain className="w-4 h-4 mr-2" />
                 AI Assistant
               </Button>
-
-              {/* Live Collaboration Button */}
-              <CollaborationButton />
-
-
             </div>
           </div>
           <div className="flex items-center space-x-2">

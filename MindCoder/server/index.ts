@@ -4,7 +4,6 @@ import { createServer } from 'http';
 import { registerRoutes } from './routes.js';
 import { setupVite, serveStatic, log } from "./vite.js";
 import { connectToMongoDB } from './db.js';
-import CollaborationServer from './collaboration.js';
 
 const app = express();
 app.use(express.json());
@@ -42,7 +41,6 @@ app.use((req, res, next) => {
 
 // Connect to MongoDB at server startup and initialize collections
 import { ensureChatHistoryCollection } from './models/chatHistory.js';
-import { ensureCollaborationCollections } from './models/collaboration.js';
 
 // Connect to MongoDB and initialize collections
 (async () => {
@@ -51,7 +49,6 @@ import { ensureCollaborationCollections } from './models/collaboration.js';
     // Initialize collections with proper schemas
     if (db) {
       await ensureChatHistoryCollection(db);
-      await ensureCollaborationCollections(db);
       console.log('MongoDB collections initialized');
     }
   } catch (err: any) {
@@ -72,9 +69,6 @@ import { ensureCollaborationCollections } from './models/collaboration.js';
 
   // Create HTTP server
   const httpServer = createServer(app);
-  
-  // Initialize collaboration service with WebSocket server
-  const collaborationService = new CollaborationServer(httpServer);
 
   const port = parseInt(process.env.PORT || '5000', 10);
   

@@ -69,23 +69,11 @@ export function LoginPage() {
         });
       } else {
         login(data.token, data.user);
-        
-        // Check if there's a pending collaboration invite
-        const pendingInvite = localStorage.getItem('pendingCollaborationInvite');
-        if (pendingInvite) {
-          localStorage.removeItem('pendingCollaborationInvite');
-          navigate('/ide');
-          toast({
-            title: "Welcome back!",
-            description: "Login successful. You can now join the collaboration session.",
-          });
-        } else {
-          navigate('/ide');
-          toast({
-            title: "Welcome back!",
-            description: "Login successful.",
-          });
-        }
+        navigate('/ide');
+        toast({
+          title: "Welcome back!",
+          description: "Login successful.",
+        });
       }
     } catch (error) {
       toast({
@@ -139,23 +127,11 @@ export function LoginPage() {
       }
 
       login(data.token, data.user);
-      
-      // Check if there's a pending collaboration invite
-      const pendingInvite = localStorage.getItem('pendingCollaborationInvite');
-      if (pendingInvite) {
-        localStorage.removeItem('pendingCollaborationInvite');
-        navigate('/ide');
-        toast({
-          title: "Welcome back!",
-          description: "Login successful. You can now join the collaboration session.",
-        });
-      } else {
-        navigate('/ide');
-        toast({
-          title: "Welcome back!",
-          description: "Login successful.",
-        });
-      }
+      navigate('/ide');
+      toast({
+        title: "Welcome back!",
+        description: "Login successful.",
+      });
     } catch (error) {
       toast({
         title: "Verification Error",
@@ -201,7 +177,6 @@ export function LoginPage() {
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
     try {
-      // Direct redirect to OAuth endpoint
       window.location.href = `/api/auth/${provider}`;
     } catch (error) {
       toast({

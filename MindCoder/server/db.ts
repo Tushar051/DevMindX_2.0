@@ -40,7 +40,16 @@ let mongoDb: Db;
 
 async function connectToMongoDB() {
   if (!mongoClient) {
-    mongoClient = new MongoClient(mongoUri);
+    // Configure TLS based on URI and environment
+    const isSrv = mongoUri.startsWith('mongodb+srv://');
+    const envTls = process.env.MONGODB_TLS;
+    const tlsEnabled = envTls === 'true' ? true : envTls === 'false' ? false : isSrv;
+    const mongoOptions: any = {
+      // Only enable TLS by default for Atlas (mongodb+srv). Allow override with MONGODB_TLS
+      tls: tlsEnabled,
+    };
+
+    mongoClient = new MongoClient(mongoUri, mongoOptions);
     await mongoClient.connect();
     mongoDb = mongoClient.db(mongoDbName);
     console.log('Connected to MongoDB');
