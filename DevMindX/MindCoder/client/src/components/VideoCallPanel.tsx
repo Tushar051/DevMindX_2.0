@@ -1,15 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Video, VideoOff, Mic, MicOff, Monitor, MonitorOff, 
   Phone, PhoneOff, Users, FileText,
   Download, Plus, X, Maximize2, Minimize2,
-  Clock, User, File, Edit, Trash2
+  Clock, User, File, Edit, Trash2, Menu
 } from 'lucide-react';
 import { useVideoCall } from '../hooks/use-video-call';
 import type { MeetingData } from '../types/meeting';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+
+// Hook for responsive detection
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) {
+      setMatches(media.matches);
+    }
+    const listener = () => setMatches(media.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [matches, query]);
+  
+  return matches;
+}
 
 // Simple PDF generation function (inline to avoid circular deps)
 function generateMeetingPDF(meetingData: MeetingData): void {
@@ -53,7 +70,6 @@ export function VideoCallPanel({
   onClose
 }: VideoCallPanelProps) {
   const {
-    localStream,
     screenStream,
     participants,
     isAudioEnabled,
@@ -70,15 +86,24 @@ export function VideoCallPanel({
     toggleVideo,
     startScreenShare,
     stopScreenShare,
-    addNote,
-    trackFileActivity
+    addNote
   } = useVideoCall(sessionId);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('video');
   const [newNote, setNewNote] = useState('');
-  const [showParticipants, setShowParticipants] = useState(true);
   const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  
+  // Responsive detection
+  const isMobile = useMediaQuery('(max-width: 640px)');
+  const isTablet = useMediaQuery('(min-width: 641px) and (max-width: 1024px)');
+  
+  // Auto-expand on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setIsExpanded(true);
+    }
+  }, [isMobile]);
 
   // Initialize meeting when component mounts (if host)
   useEffect(() => {
@@ -134,36 +159,49 @@ export function VideoCallPanel({
 
   const participantArray = Array.from(participants.values());
 
+  // Responsive panel positioning
+  const getPanelClasses = useCallback(() => {
+    if (isMobile) {
+      return 'fixed inset-0 w-full h-full rounded-none';
+    }
+    if (isExpanded) {
+      return 'fixed inset-4 sm:inset-6 lg:inset-8';
+    }
+    return 'fixed bottom-4 right-4 w-80 sm:w-96 max-h-[80vh]';
+  }, [isMobile, isExpanded]);
+
   return (
-    <div className={`fixed ${isExpanded ? 'inset-4' : 'bottom-4 right-4 w-96'} bg-gray-900 rounded-xl shadow-2xl border border-gray-700 z-50 flex flex-col transition-all duration-300`}>
+    <div className={`${getPanelClasses()} bg-gray-900 rounded-xl shadow-2xl border border-gray-700 z-50 flex flex-col transition-all duration-300 safe-area-inset`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800 rounded-t-xl">
-        <div className="flex items-center gap-2">
-          <Video className="w-5 h-5 text-green-400" />
-          <span className="font-semibold text-white">
+      <div className="flex items-center justify-between p-2 sm:p-3 border-b border-gray-700 bg-gray-800 rounded-t-xl">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Video className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 flex-shrink-0" />
+          <span className="font-semibold text-white text-sm sm:text-base truncate">
             {meetingData?.title || 'Video Call'}
           </span>
           {isInCall && (
-            <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/20 px-2 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/20 px-2 py-0.5 rounded-full flex-shrink-0">
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              Live
+              <span className="hidden sm:inline">Live</span>
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-gray-400 hover:text-white"
-          >
-            {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </Button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {!isMobile && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-gray-400 hover:text-white touch-target-sm"
+            >
+              {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            className="text-gray-400 hover:text-white touch-target-sm"
           >
             <X className="w-4 h-4" />
           </Button>
@@ -171,27 +209,38 @@ export function VideoCallPanel({
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-4 bg-gray-800 m-2 rounded-lg">
-          <TabsTrigger value="video" className="text-xs">
-            <Video className="w-3 h-3 mr-1" /> Video
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="grid grid-cols-4 bg-gray-800 m-2 rounded-lg flex-shrink-0">
+          <TabsTrigger value="video" className="text-xs touch-target-sm px-1 sm:px-2">
+            <Video className="w-3 h-3 sm:mr-1" /> 
+            <span className="hidden sm:inline">Video</span>
           </TabsTrigger>
-          <TabsTrigger value="participants" className="text-xs">
-            <Users className="w-3 h-3 mr-1" /> ({participantArray.length})
+          <TabsTrigger value="participants" className="text-xs touch-target-sm px-1 sm:px-2">
+            <Users className="w-3 h-3 sm:mr-1" /> 
+            <span className="hidden sm:inline">({participantArray.length})</span>
+            <span className="sm:hidden">{participantArray.length}</span>
           </TabsTrigger>
-          <TabsTrigger value="notes" className="text-xs">
-            <FileText className="w-3 h-3 mr-1" /> Notes
+          <TabsTrigger value="notes" className="text-xs touch-target-sm px-1 sm:px-2">
+            <FileText className="w-3 h-3 sm:mr-1" /> 
+            <span className="hidden sm:inline">Notes</span>
           </TabsTrigger>
-          <TabsTrigger value="activity" className="text-xs">
-            <File className="w-3 h-3 mr-1" /> Files
+          <TabsTrigger value="activity" className="text-xs touch-target-sm px-1 sm:px-2">
+            <File className="w-3 h-3 sm:mr-1" /> 
+            <span className="hidden sm:inline">Files</span>
           </TabsTrigger>
         </TabsList>
 
         {/* Video Tab */}
-        <TabsContent value="video" className="flex-1 p-2 m-0">
-          <div className={`grid gap-2 h-full ${isExpanded ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <TabsContent value="video" className="flex-1 p-2 m-0 overflow-auto">
+          <div className={`grid gap-2 h-full ${
+            isMobile 
+              ? 'grid-cols-1 sm:grid-cols-2' 
+              : isExpanded 
+                ? 'grid-cols-2 lg:grid-cols-3' 
+                : 'grid-cols-2'
+          }`}>
             {/* Local Video */}
-            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video min-h-[120px]">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -201,16 +250,16 @@ export function VideoCallPanel({
               />
               {!isVideoEnabled && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-                  <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center">
-                    <User className="w-8 h-8 text-gray-400" />
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-700 flex items-center justify-center">
+                    <User className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs text-white">
+              <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-black/60 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-xs text-white">
                 You {isHost && '(Host)'}
               </div>
               {!isAudioEnabled && (
-                <div className="absolute top-2 right-2 bg-red-500/80 p-1 rounded">
+                <div className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-red-500/80 p-1 rounded">
                   <MicOff className="w-3 h-3 text-white" />
                 </div>
               )}
@@ -218,15 +267,16 @@ export function VideoCallPanel({
 
             {/* Screen Share */}
             {screenStream && (
-              <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video col-span-2">
+              <div className={`relative bg-gray-800 rounded-lg overflow-hidden aspect-video min-h-[120px] ${isMobile ? '' : 'col-span-2'}`}>
                 <video
                   autoPlay
                   playsInline
                   ref={(el) => { if (el) el.srcObject = screenStream; }}
                   className="w-full h-full object-contain"
                 />
-                <div className="absolute bottom-2 left-2 bg-blue-500/80 px-2 py-1 rounded text-xs text-white flex items-center gap-1">
-                  <Monitor className="w-3 h-3" /> Screen Share
+                <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-blue-500/80 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-xs text-white flex items-center gap-1">
+                  <Monitor className="w-3 h-3" /> 
+                  <span className="hidden sm:inline">Screen Share</span>
                 </div>
               </div>
             )}
@@ -235,7 +285,7 @@ export function VideoCallPanel({
             {participantArray
               .filter(p => p.id !== currentUserId)
               .map(participant => (
-                <div key={participant.id} className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+                <div key={participant.id} className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video min-h-[120px]">
                   <video
                     ref={(el) => { if (el) remoteVideoRefs.current.set(participant.id, el); }}
                     autoPlay
@@ -245,18 +295,18 @@ export function VideoCallPanel({
                   {!participant.isVideoEnabled && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
                       <div 
-                        className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                        className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white text-lg sm:text-xl font-bold"
                         style={{ backgroundColor: participant.color }}
                       >
                         {participant.username.charAt(0).toUpperCase()}
                       </div>
                     </div>
                   )}
-                  <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs text-white">
+                  <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 bg-black/60 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-xs text-white truncate max-w-[80%]">
                     {participant.username}
                   </div>
                   {!participant.isAudioEnabled && (
-                    <div className="absolute top-2 right-2 bg-red-500/80 p-1 rounded">
+                    <div className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-red-500/80 p-1 rounded">
                       <MicOff className="w-3 h-3 text-white" />
                     </div>
                   )}
@@ -303,17 +353,17 @@ export function VideoCallPanel({
         </TabsContent>
 
         {/* Notes Tab */}
-        <TabsContent value="notes" className="flex-1 p-2 m-0 flex flex-col">
-          <div className="flex gap-2 mb-2">
+        <TabsContent value="notes" className="flex-1 p-2 m-0 flex flex-col min-h-0">
+          <div className="flex gap-2 mb-2 flex-shrink-0">
             <input
               type="text"
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAddNote()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
               placeholder="Add a note..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 touch-target"
             />
-            <Button onClick={handleAddNote} size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={handleAddNote} size="sm" className="bg-indigo-600 hover:bg-indigo-700 touch-target-sm">
               <Plus className="w-4 h-4" />
             </Button>
           </div>
@@ -374,25 +424,26 @@ export function VideoCallPanel({
       </Tabs>
 
       {/* Control Bar */}
-      <div className="p-3 border-t border-gray-700 bg-gray-800 rounded-b-xl">
+      <div className="p-2 sm:p-3 border-t border-gray-700 bg-gray-800 rounded-b-xl flex-shrink-0 safe-area-inset">
         {!isInCall ? (
           <div className="flex justify-center gap-2">
             <Button
               onClick={handleJoinCall}
-              className="bg-green-600 hover:bg-green-700 text-white px-6"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 touch-target"
             >
               <Phone className="w-4 h-4 mr-2" />
               Join Call
             </Button>
           </div>
         ) : (
-          <div className="flex items-center justify-between">
+          <div className={`flex items-center ${isMobile ? 'flex-col gap-3' : 'justify-between'}`}>
+            {/* Media Controls */}
             <div className="flex gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={toggleAudio}
-                className={`${isAudioEnabled ? 'bg-gray-700 text-white' : 'bg-red-500/20 text-red-400'}`}
+                className={`touch-target-sm ${isAudioEnabled ? 'bg-gray-700 text-white' : 'bg-red-500/20 text-red-400'}`}
               >
                 {isAudioEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
               </Button>
@@ -400,65 +451,70 @@ export function VideoCallPanel({
                 variant="ghost"
                 size="sm"
                 onClick={toggleVideo}
-                className={`${isVideoEnabled ? 'bg-gray-700 text-white' : 'bg-red-500/20 text-red-400'}`}
+                className={`touch-target-sm ${isVideoEnabled ? 'bg-gray-700 text-white' : 'bg-red-500/20 text-red-400'}`}
               >
                 {isVideoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                className={`${isScreenSharing ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-white'}`}
-              >
-                {isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
-              </Button>
+              {/* Hide screen share on mobile - not well supported */}
+              {!isMobile && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                  className={`touch-target-sm ${isScreenSharing ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-white'}`}
+                >
+                  {isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                </Button>
+              )}
             </div>
 
-            <div className="flex gap-2">
-              {meetingData && (
+            {/* Action Buttons */}
+            <div className="flex gap-2 flex-wrap justify-center">
+              {meetingData && !isMobile && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleDownloadPDF}
-                  className="bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
+                  className="bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 touch-target-sm"
                   title="Download Meeting Summary PDF"
                 >
-                  <Download className="w-4 h-4 mr-1" />
-                  PDF
+                  <Download className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">PDF</span>
                 </Button>
               )}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLeaveCall}
-                className="bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                className="bg-red-500/20 text-red-400 hover:bg-red-500/30 touch-target-sm"
               >
-                <PhoneOff className="w-4 h-4 mr-1" />
-                Leave
+                <PhoneOff className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Leave</span>
               </Button>
               {isHost && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleEndMeeting}
-                  className="bg-red-600 text-white hover:bg-red-700"
+                  className="bg-red-600 text-white hover:bg-red-700 touch-target-sm"
                 >
-                  End Meeting
+                  <span className="hidden sm:inline">End Meeting</span>
+                  <span className="sm:hidden">End</span>
                 </Button>
               )}
             </div>
           </div>
         )}
 
-        {/* Meeting Info */}
+        {/* Meeting Info - Simplified on mobile */}
         {meetingData && (
-          <div className="mt-2 pt-2 border-t border-gray-700 flex items-center justify-between text-xs text-gray-400">
-            <span>
-              <Clock className="w-3 h-3 inline mr-1" />
-              Started: {formatDateTime(meetingData.startTime)}
+          <div className={`mt-2 pt-2 border-t border-gray-700 text-xs text-gray-400 ${isMobile ? 'text-center' : 'flex items-center justify-between'}`}>
+            <span className="flex items-center justify-center sm:justify-start gap-1">
+              <Clock className="w-3 h-3" />
+              <span className="hidden sm:inline">Started:</span> {formatTime(meetingData.startTime)}
             </span>
-            <span>
-              {meetingData.notes.length} notes | {meetingData.fileActivities.length} file changes
+            <span className={isMobile ? 'block mt-1' : ''}>
+              {meetingData.notes.length} notes | {meetingData.fileActivities.length} files
             </span>
           </div>
         )}

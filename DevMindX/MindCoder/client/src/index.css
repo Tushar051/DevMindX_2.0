@@ -1119,3 +1119,351 @@ html {
   width: 320px;
   z-index: 40;
 }
+
+/* ============================================
+   RESPONSIVE DESIGN UTILITIES
+   ============================================ */
+
+/* Mobile-first responsive breakpoints */
+@media (max-width: 640px) {
+  /* Mobile Navigation */
+  .mobile-nav-hidden {
+    display: none !important;
+  }
+  
+  /* Mobile Typography */
+  .text-responsive-hero {
+    font-size: 2.5rem !important;
+    line-height: 1.2 !important;
+  }
+  
+  .text-responsive-title {
+    font-size: 1.5rem !important;
+  }
+  
+  .text-responsive-subtitle {
+    font-size: 1rem !important;
+  }
+  
+  /* Mobile Spacing */
+  .px-responsive {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  
+  .py-responsive {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+  
+  /* Mobile Grid */
+  .grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Mobile Panels */
+  .panel-responsive {
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+  
+  /* Mobile Video Call Panel */
+  .video-call-panel-mobile {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 0 !important;
+  }
+  
+  /* Mobile IDE Layout */
+  .ide-sidebar-mobile {
+    position: fixed !important;
+    left: 0 !important;
+    top: 48px !important;
+    bottom: 0 !important;
+    width: 280px !important;
+    z-index: 50 !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-out;
+  }
+  
+  .ide-sidebar-mobile.open {
+    transform: translateX(0);
+  }
+  
+  /* Mobile Chat Panel */
+  .chat-panel-mobile {
+    position: fixed !important;
+    right: 0 !important;
+    top: 48px !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    z-index: 50 !important;
+  }
+  
+  /* Mobile Buttons */
+  .btn-mobile-full {
+    width: 100% !important;
+  }
+  
+  /* Mobile Cards */
+  .card-mobile-stack {
+    flex-direction: column !important;
+  }
+  
+  /* Hide on mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+  
+  /* Mobile Stats Grid */
+  .stats-grid-mobile {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+  
+  /* Mobile Feature Cards */
+  .feature-card-mobile {
+    padding: 1rem !important;
+  }
+  
+  .feature-card-mobile .feature-icon {
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+}
+
+/* Tablet breakpoint */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .text-responsive-hero {
+    font-size: 4rem !important;
+  }
+  
+  .grid-responsive-tablet {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .panel-responsive-tablet {
+    width: 320px !important;
+  }
+  
+  /* Tablet IDE Layout */
+  .ide-layout-tablet {
+    flex-direction: column !important;
+  }
+  
+  .ide-panel-tablet {
+    width: 100% !important;
+    height: 50% !important;
+  }
+}
+
+/* Desktop and above */
+@media (min-width: 1025px) {
+  .show-desktop-only {
+    display: flex !important;
+  }
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  .touch-target-sm {
+    min-height: 36px !important;
+    min-width: 36px !important;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: max(0px)) {
+  .safe-area-inset {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================
+   PRODUCTION OPTIMIZATIONS
+   ============================================ */
+
+/* Optimize paint performance */
+.optimize-paint {
+  contain: layout style paint;
+  will-change: auto;
+}
+
+/* Reduce motion for battery saving */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .float-animation,
+  .pulse-glow,
+  .energy-pulse,
+  .gradient-text,
+  .ai-gradient-bg {
+    animation: none !important;
+  }
+  
+  .hover-lift:hover,
+  .hover-lift-enhanced:hover {
+    transform: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .glass-card {
+    background: rgba(0, 0, 0, 0.9) !important;
+    border: 2px solid white !important;
+  }
+  
+  .gradient-text {
+    background: none !important;
+    -webkit-text-fill-color: white !important;
+    color: white !important;
+  }
+}
+
+/* Dark mode preference */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .glass-card,
+  .ai-gradient-bg {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* Focus visible for accessibility */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--ai-purple);
+  outline-offset: 2px;
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--ai-purple);
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Error state */
+.error-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* Success state */
+.success-pulse {
+  animation: success-pulse 0.5s ease-out;
+}
+
+@keyframes success-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Responsive container */
+.container-responsive {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 1280px;
+  }
+}
+
+/* Responsive flex utilities */
+.flex-col-mobile {
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  .flex-col-mobile {
+    flex-direction: row;
+  }
+}
+
+/* Responsive gap */
+.gap-responsive {
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .gap-responsive {
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gap-responsive {
+    gap: 2rem;
+  }
+}

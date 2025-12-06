@@ -7,8 +7,45 @@ import { setupSocketIO } from "./realtime/socket.js";
 import { connectToMongoDB } from './db.js';
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Production security headers
+if (isProduction) {
+  app.use((req, res, next) => {
+    // Security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    
+    // CORS for production
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    
+    next();
+  });
+  
+  // Trust proxy for production (behind load balancer)
+  app.set('trust proxy', 1);
+}
+
+// Request body parsing with limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+
+// Compression for production
+if (isProduction) {
+  // Note: In production, use nginx/cloudflare for compression
+  // This is a fallback
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    next();
+  });
+}
 
 app.use((req, res, next) => {
   const start = Date.now();

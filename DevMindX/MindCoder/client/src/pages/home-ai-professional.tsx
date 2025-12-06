@@ -172,51 +172,54 @@ export default function HomeAIProfessional() {
     <div className="min-h-screen ai-gradient-bg">
       {/* Professional Header */}
       <header className="header-glass sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-3 sm:py-4">
             <motion.div 
-              className="flex items-center space-x-3"
+              className="flex items-center space-x-2 sm:space-x-3"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
             >
               <div className="relative">
-                <Code className="w-8 h-8 text-purple-400" />
+                <Code className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
                 <div className="absolute inset-0 blur-xl bg-purple-500 opacity-50 -z-10" />
               </div>
-              <span className="text-2xl font-bold gradient-text">DevMindX</span>
-              <span className="badge-ai text-xs">AI-Powered</span>
+              <span className="text-xl sm:text-2xl font-bold gradient-text">DevMindX</span>
+              <span className="badge-ai text-xs hidden sm:inline-flex">AI-Powered</span>
             </motion.div>
             
             <motion.div 
-              className="flex items-center space-x-4"
+              className="flex items-center space-x-2 sm:space-x-4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
             >
               {isAuthenticated ? (
                 <>
-                  <span className="text-gray-300 hidden sm:block">
+                  <span className="text-gray-300 hidden lg:block">
                     Welcome, <span className="text-purple-400 font-semibold">{user?.username || 'User'}</span>
                   </span>
                   <Button 
                     onClick={() => navigate('/cursor-ide')} 
                     variant="outline"
-                    className="border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/10 hidden md:flex"
+                    size="sm"
+                    className="border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/10 hidden lg:flex"
                   >
-                    <Code className="w-4 h-4 mr-2" />
-                    IDE
+                    <Code className="w-4 h-4 lg:mr-2" />
+                    <span className="hidden xl:inline">IDE</span>
                   </Button>
                   <Button 
                     onClick={() => navigate('/generator')} 
                     variant="outline"
+                    size="sm"
                     className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 hidden md:flex"
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generator
+                    <Sparkles className="w-4 h-4 md:mr-2" />
+                    <span className="hidden lg:inline">Generator</span>
                   </Button>
                   <Button 
                     onClick={() => navigate('/projects')} 
                     variant="outline"
-                    className="border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10 hidden lg:flex"
+                    size="sm"
+                    className="border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10 hidden xl:flex"
                   >
                     <FolderOpen className="w-4 h-4 mr-2" />
                     Projects
@@ -224,17 +227,20 @@ export default function HomeAIProfessional() {
                   <Button 
                     onClick={() => navigate('/account')} 
                     variant="outline"
-                    className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10"
+                    size="sm"
+                    className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 px-2 sm:px-4"
                   >
-                    Account
+                    <span className="hidden sm:inline">Account</span>
+                    <span className="sm:hidden">⚙️</span>
                   </Button>
                   <Button 
                     onClick={logout} 
                     variant="ghost"
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    size="sm"
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 sm:px-4"
                   >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
+                    <LogOut className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Logout</span>
                   </Button>
                 </>
               ) : (
@@ -242,15 +248,18 @@ export default function HomeAIProfessional() {
                   <Button 
                     onClick={() => navigate('/login')} 
                     variant="ghost" 
-                    className="text-white hover:text-purple-400 hover:bg-white/5"
+                    size="sm"
+                    className="text-white hover:text-purple-400 hover:bg-white/5 px-2 sm:px-4"
                   >
                     Login
                   </Button>
                   <Button 
                     onClick={() => navigate('/signup')} 
-                    className="btn-ai-primary"
+                    size="sm"
+                    className="btn-ai-primary px-3 sm:px-4"
                   >
-                    Get Started
+                    <span className="hidden sm:inline">Get Started</span>
+                    <span className="sm:hidden">Start</span>
                   </Button>
                 </>
               )}
@@ -260,7 +269,7 @@ export default function HomeAIProfessional() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8 overflow-hidden spotlight">
+      <section className="relative py-12 sm:py-20 px-4 sm:px-6 lg:px-8 overflow-hidden spotlight">
         <div className="absolute inset-0 grid-pattern opacity-30" />
         
         <div className="max-w-7xl mx-auto text-center relative z-10">
@@ -274,17 +283,17 @@ export default function HomeAIProfessional() {
               initial={{ opacity: 0, scale: 0.5, rotateX: -30 }}
               animate={{ opacity: 1, scale: 1, rotateX: 0 }}
               transition={{ duration: 1, ease: "easeOut" }}
-              className="mb-8 relative"
+              className="mb-4 sm:mb-8 relative"
               style={{ perspective: "1000px" }}
             >
               <div className="relative inline-block">
-                {/* Glow layers */}
-                <div className="absolute inset-0 blur-3xl bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 opacity-30 animate-pulse" />
-                <div className="absolute inset-0 blur-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 opacity-20" />
+                {/* Glow layers - reduced on mobile for performance */}
+                <div className="absolute inset-0 blur-2xl sm:blur-3xl bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 opacity-20 sm:opacity-30 animate-pulse" />
+                <div className="absolute inset-0 blur-xl sm:blur-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 opacity-15 sm:opacity-20 hidden sm:block" />
                 
                 {/* Main brand name */}
                 <motion.h1 
-                  className="relative text-7xl md:text-9xl font-black tracking-tight"
+                  className="relative text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tight"
                   style={{
                     background: 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 25%, #06B6D4 50%, #8B5CF6 75%, #3B82F6 100%)',
                     backgroundSize: '200% 200%',
@@ -305,11 +314,11 @@ export default function HomeAIProfessional() {
                   DevMindX
                 </motion.h1>
                 
-                {/* Particle effects */}
-                {[...Array(20)].map((_, i) => (
+                {/* Particle effects - fewer on mobile */}
+                {[...Array(typeof window !== 'undefined' && window.innerWidth < 640 ? 8 : 20)].map((_, i) => (
                   <motion.div
                     key={i}
-                    className="absolute w-1 h-1 bg-purple-400 rounded-full"
+                    className="absolute w-1 h-1 bg-purple-400 rounded-full hidden sm:block"
                     style={{
                       left: `${Math.random() * 100}%`,
                       top: `${Math.random() * 100}%`,
@@ -330,38 +339,38 @@ export default function HomeAIProfessional() {
             </motion.div>
 
             <motion.div 
-              className="inline-flex items-center px-6 py-3 glass-card rounded-full mb-8 hover-lift"
+              className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 glass-card rounded-full mb-4 sm:mb-8 hover-lift"
               whileHover={{ scale: 1.05 }}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              <Sparkles className="w-5 h-5 text-purple-400 mr-2 animate-pulse" />
-              <span className="text-purple-300 font-medium">Next-Generation AI Development Platform</span>
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 mr-2 animate-pulse" />
+              <span className="text-purple-300 font-medium text-sm sm:text-base">Next-Gen AI Development</span>
             </motion.div>
             
             <motion.h2 
-              className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight"
+              className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6 leading-tight px-2"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
             >
               Build <span className="gradient-text neon-text">Anything</span>
-              <br />
-              with AI Intelligence
+              <br className="hidden sm:block" />
+              <span className="sm:hidden"> </span>with AI Intelligence
             </motion.h2>
             
-            <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-base sm:text-xl md:text-2xl text-gray-300 mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed px-2">
               Transform your ideas into production-ready applications in seconds.
-              <br />
-              <span className="text-purple-400 font-semibold">No coding expertise required.</span>
+              <br className="hidden sm:block" />
+              <span className="text-purple-400 font-semibold"> No coding expertise required.</span>
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-10 sm:mb-16 px-4">
               <Button 
                 size="lg"
                 onClick={() => navigate(isAuthenticated ? '/generator' : '/signup')}
-                className="btn-ai-primary px-8 py-6 text-lg font-semibold"
+                className="btn-ai-primary px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg font-semibold w-full sm:w-auto touch-target"
               >
                 <Play className="w-5 h-5 mr-2" />
                 Start Building Free
@@ -370,7 +379,7 @@ export default function HomeAIProfessional() {
                 size="lg"
                 variant="outline"
                 onClick={() => navigate('/projects')}
-                className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 px-8 py-6 text-lg"
+                className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto touch-target"
               >
                 View Examples
                 <ArrowRight className="w-5 h-5 ml-2" />
@@ -378,19 +387,19 @@ export default function HomeAIProfessional() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 max-w-4xl mx-auto px-2">
               {stats.map((stat, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 + index * 0.1 }}
-                  className="glass-card p-6 rounded-xl hover-lift"
+                  className="glass-card p-4 sm:p-6 rounded-xl hover-lift"
                 >
-                  <div className="text-3xl md:text-4xl font-bold gradient-text mb-2">
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold gradient-text mb-1 sm:mb-2">
                     {stat.value}
                   </div>
-                  <div className="text-gray-400 text-sm">
+                  <div className="text-gray-400 text-xs sm:text-sm">
                     {stat.label}
                   </div>
                 </motion.div>
@@ -399,29 +408,29 @@ export default function HomeAIProfessional() {
           </motion.div>
         </div>
 
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 w-20 h-20 bg-purple-500/20 rounded-full blur-3xl float-animation" />
-        <div className="absolute bottom-20 right-10 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl float-animation" style={{ animationDelay: '2s' }} />
+        {/* Floating Elements - hidden on mobile for performance */}
+        <div className="absolute top-20 left-10 w-20 h-20 bg-purple-500/20 rounded-full blur-3xl float-animation hidden sm:block" />
+        <div className="absolute bottom-20 right-10 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl float-animation hidden sm:block" style={{ animationDelay: '2s' }} />
       </section>
 
       {/* Capabilities Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 relative">
+      <section className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8 relative">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="text-center mb-8 sm:mb-12"
           >
-            <h2 className="text-4xl font-bold text-white mb-4">
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-3 sm:mb-4">
               Powered by <span className="gradient-text">Advanced AI</span>
             </h2>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-              Cutting-edge technology that understands your vision and brings it to life
+            <p className="text-base sm:text-xl text-gray-300 max-w-2xl mx-auto px-2">
+              Cutting-edge technology that understands your vision
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
             {capabilities.map((capability, index) => (
               <motion.div
                 key={index}
@@ -429,14 +438,14 @@ export default function HomeAIProfessional() {
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="glass-card p-6 rounded-xl hover-lift flex items-center space-x-4"
+                className="glass-card p-3 sm:p-6 rounded-lg sm:rounded-xl hover-lift flex items-center space-x-2 sm:space-x-4"
               >
-                <div className="feature-icon-container p-3 rounded-lg">
-                  <div className="text-purple-400">
+                <div className="feature-icon-container p-2 sm:p-3 rounded-lg flex-shrink-0">
+                  <div className="text-purple-400 scale-75 sm:scale-100">
                     {capability.icon}
                   </div>
                 </div>
-                <span className="text-white font-medium text-sm md:text-base">
+                <span className="text-white font-medium text-xs sm:text-sm md:text-base leading-tight">
                   {capability.text}
                 </span>
               </motion.div>
@@ -446,56 +455,61 @@ export default function HomeAIProfessional() {
       </section>
 
       {/* Feature Cards */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
+      <section className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="text-center mb-8 sm:mb-12"
           >
-            <h2 className="text-4xl font-bold text-white mb-4">
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-3 sm:mb-4">
               Choose Your <span className="gradient-text">Workflow</span>
             </h2>
-            <p className="text-xl text-gray-300">
-              Three powerful tools, one seamless platform
+            <p className="text-base sm:text-xl text-gray-300">
+              Powerful tools, one seamless platform
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
             {features.map((feature, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.15 }}
-                className="card-ai-feature group cursor-pointer"
+                transition={{ delay: index * 0.1 }}
+                className="card-ai-feature group cursor-pointer p-4 sm:p-6"
                 onClick={feature.action}
               >
-                <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform pulse-glow`}>
-                  {feature.icon}
+                <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 sm:mb-6 text-white group-hover:scale-110 transition-transform pulse-glow`}>
+                  <div className="scale-75 sm:scale-100">{feature.icon}</div>
                 </div>
                 
-                <h3 className="text-2xl font-bold text-white mb-3">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">
                   {feature.title}
                 </h3>
                 
-                <p className="text-gray-300 mb-6 leading-relaxed">
+                <p className="text-gray-300 mb-4 sm:mb-6 leading-relaxed text-sm sm:text-base">
                   {feature.description}
                 </p>
 
-                <ul className="space-y-3 mb-8">
-                  {feature.features.map((item, i) => (
-                    <li key={i} className="flex items-center text-gray-300 text-sm">
-                      <CheckCircle className="w-4 h-4 text-green-400 mr-3 flex-shrink-0" />
+                <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
+                  {feature.features.slice(0, 3).map((item, i) => (
+                    <li key={i} className="flex items-center text-gray-300 text-xs sm:text-sm">
+                      <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-400 mr-2 sm:mr-3 flex-shrink-0" />
                       <span>{item}</span>
                     </li>
                   ))}
+                  {feature.features.length > 3 && (
+                    <li className="text-gray-400 text-xs sm:text-sm ml-5 sm:ml-7">
+                      +{feature.features.length - 3} more features
+                    </li>
+                  )}
                 </ul>
 
                 <Button 
-                  className={`w-full bg-gradient-to-r ${feature.gradient} hover:opacity-90 text-white font-semibold group-hover:scale-105 transition-transform`}
+                  className={`w-full bg-gradient-to-r ${feature.gradient} hover:opacity-90 text-white font-semibold group-hover:scale-105 transition-transform text-sm sm:text-base py-2 sm:py-3 touch-target`}
                 >
                   {feature.buttonText}
                   <ArrowRight className="w-4 h-4 ml-2" />
@@ -583,7 +597,7 @@ export default function HomeAIProfessional() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 px-2 sm:px-0">
             {llmPricing.map((llm, index) => (
               <motion.div
                 key={index}
@@ -592,13 +606,13 @@ export default function HomeAIProfessional() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
                 whileHover={{ 
-                  scale: 1.05,
-                  y: -10,
+                  scale: 1.02,
+                  y: -5,
                   transition: { duration: 0.3, ease: "easeOut" }
                 }}
-                className={`glass-card rounded-2xl p-6 relative cursor-pointer group transition-all duration-300 ${
-                  llm.recommended ? 'border-2 border-purple-500 shadow-2xl shadow-purple-500/30' : 'border border-gray-700/50'
-                } hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-500/20`}
+                className={`glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6 relative cursor-pointer group transition-all duration-300 ${
+                  llm.recommended ? 'border-2 border-purple-500 shadow-xl sm:shadow-2xl shadow-purple-500/30' : 'border border-gray-700/50'
+                } hover:border-purple-500/50 hover:shadow-xl sm:hover:shadow-2xl hover:shadow-purple-500/20`}
               >
                 {/* Status Badge */}
                 <div className="absolute -top-3 right-4">
@@ -715,38 +729,38 @@ export default function HomeAIProfessional() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="glass-card animated-border rounded-3xl p-12 text-center relative overflow-hidden"
+            className="glass-card animated-border rounded-2xl sm:rounded-3xl p-6 sm:p-12 text-center relative overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 via-blue-600/10 to-cyan-600/10" />
             
             <div className="relative z-10">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">
                 Ready to Build the <span className="gradient-text">Future</span>?
               </h2>
-              <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto">
+              <p className="text-base sm:text-xl text-gray-300 mb-6 sm:mb-10 max-w-2xl mx-auto">
                 Join thousands of developers leveraging AI to build faster, smarter, and better
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                 <Button 
                   size="lg"
                   onClick={() => navigate(isAuthenticated ? '/generator' : '/signup')}
-                  className="btn-ai-primary px-10 py-7 text-lg font-semibold"
+                  className="btn-ai-primary px-6 sm:px-10 py-5 sm:py-7 text-base sm:text-lg font-semibold touch-target"
                 >
-                  <Rocket className="w-6 h-6 mr-2" />
+                  <Rocket className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
                   Start Building Now
                 </Button>
                 <Button 
                   size="lg"
                   variant="outline"
                   onClick={() => navigate('/projects')}
-                  className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 px-10 py-7 text-lg"
+                  className="border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 px-6 sm:px-10 py-5 sm:py-7 text-base sm:text-lg touch-target"
                 >
                   Explore Examples
                 </Button>
@@ -757,24 +771,24 @@ export default function HomeAIProfessional() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-purple-500/20 bg-black/30 py-12">
+      <footer className="border-t border-purple-500/20 bg-black/30 py-8 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-8">
-            <div className="flex items-center space-x-3 mb-6 md:mb-0">
-              <Code className="w-8 h-8 text-purple-400" />
-              <span className="text-2xl font-bold gradient-text">DevMindX</span>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 sm:mb-8">
+            <div className="flex items-center space-x-3 mb-4 md:mb-0">
+              <Code className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
+              <span className="text-xl sm:text-2xl font-bold gradient-text">DevMindX</span>
             </div>
-            <div className="flex flex-wrap justify-center gap-8 text-gray-400">
+            <div className="flex flex-wrap justify-center gap-4 sm:gap-8 text-gray-400 text-sm sm:text-base">
               <a href="#" className="hover:text-purple-400 transition-colors">About</a>
-              <a href="#" className="hover:text-purple-400 transition-colors">Documentation</a>
+              <a href="#" className="hover:text-purple-400 transition-colors">Docs</a>
               <a href="#" className="hover:text-purple-400 transition-colors">API</a>
               <a href="#" className="hover:text-purple-400 transition-colors">Support</a>
-              <a href="#" className="hover:text-purple-400 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-purple-400 transition-colors">Terms</a>
+              <a href="#" className="hover:text-purple-400 transition-colors hidden sm:inline">Privacy</a>
+              <a href="#" className="hover:text-purple-400 transition-colors hidden sm:inline">Terms</a>
             </div>
           </div>
-          <div className="section-divider mb-8" />
-          <div className="text-center text-gray-400 text-sm">
+          <div className="section-divider mb-6 sm:mb-8" />
+          <div className="text-center text-gray-400 text-xs sm:text-sm">
             © 2025 DevMindX. Powered by Advanced AI Technology.
           </div>
         </div>

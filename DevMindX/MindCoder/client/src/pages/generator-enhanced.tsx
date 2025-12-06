@@ -396,26 +396,26 @@ export default function GeneratorEnhanced() {
   if (!projectGenerated) {
     return (
       <div className="min-h-screen bg-gray-900">
-        <header className="border-b border-gray-800 bg-white/95 backdrop-blur-sm sticky top-0 z-50">
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-3">
-              <div className="flex items-center space-x-4">
-                <Button variant="ghost" onClick={() => setLocation('/')} className="text-gray-300 hover:text-white">
-                  <Home className="w-5 h-5 mr-2" />
-                  Home
+        <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-full mx-auto px-3 sm:px-4 lg:px-8">
+            <div className="flex justify-between items-center py-2 sm:py-3">
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <Button variant="ghost" onClick={() => setLocation('/')} className="text-gray-300 hover:text-white px-2 sm:px-4">
+                  <Home className="w-5 h-5 sm:mr-2" />
+                  <span className="hidden sm:inline">Home</span>
                 </Button>
                 <div className="flex items-center space-x-2">
-                  <Sparkles className="w-6 h-6 text-purple-400" />
-                  <span className="text-xl font-bold text-white">AI Generator</span>
+                  <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
+                  <span className="text-lg sm:text-xl font-bold text-white">AI Generator</span>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-3">
-                <Button onClick={() => setLocation('/projects')} variant="outline" size="sm">
-                  <FolderOpen className="w-4 h-4 mr-2" />
-                  Projects
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <Button onClick={() => setLocation('/projects')} variant="outline" size="sm" className="px-2 sm:px-4">
+                  <FolderOpen className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Projects</span>
                 </Button>
-                <Button onClick={() => setLocation('/ide')} variant="outline" size="sm">
+                <Button onClick={() => setLocation('/ide')} variant="outline" size="sm" className="hidden sm:flex">
                   <Code className="w-4 h-4 mr-2" />
                   IDE
                 </Button>
@@ -424,52 +424,52 @@ export default function GeneratorEnhanced() {
           </div>
         </header>
 
-        <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-8">
-          <div className="max-w-2xl w-full space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold text-white mb-3">Create Your Project</h1>
-              <p className="text-gray-400 text-lg">Describe what you want to build and watch AI bring it to life</p>
+        <div className="flex items-center justify-center min-h-[calc(100vh-56px)] sm:min-h-[calc(100vh-64px)] p-4 sm:p-8">
+          <div className="max-w-2xl w-full space-y-4 sm:space-y-6">
+            <div className="text-center mb-4 sm:mb-8">
+              <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-3">Create Your Project</h1>
+              <p className="text-gray-400 text-sm sm:text-lg">Describe what you want to build and watch AI bring it to life</p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
                   Project Name
                 </label>
                 <Input
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="my-awesome-app"
-                  className="bg-gray-800 border-gray-700 text-white h-12"
+                  className="bg-gray-800 border-gray-700 text-white h-10 sm:h-12 text-sm sm:text-base"
                   disabled={isGenerating}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
                   Framework (Optional)
                 </label>
                 <Input
                   value={framework}
                   onChange={(e) => setFramework(e.target.value)}
                   placeholder="React, Vue, Next.js..."
-                  className="bg-gray-800 border-gray-700 text-white h-12"
+                  className="bg-gray-800 border-gray-700 text-white h-10 sm:h-12 text-sm sm:text-base"
                   disabled={isGenerating}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
                   Describe Your Project
                 </label>
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="I want to build a modern todo app with drag & drop, categories, due dates, and a beautiful dark theme..."
-                  className="min-h-[200px] bg-gray-800 border-gray-700 text-white placeholder-gray-500 resize-none"
+                  className="min-h-[150px] sm:min-h-[200px] bg-gray-800 border-gray-700 text-white placeholder-gray-500 resize-none text-sm sm:text-base"
                   disabled={isGenerating}
                 />
-                <div className="flex justify-between items-center mt-2">
+                <div className="flex justify-between items-center mt-1.5 sm:mt-2">
                   <span className="text-xs text-gray-400">
                     {prompt.length}/2000 characters
                   </span>
@@ -479,7 +479,7 @@ export default function GeneratorEnhanced() {
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || !prompt.trim()}
-                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-6 text-lg"
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-4 sm:py-6 text-base sm:text-lg touch-target"
               >
                 {isGenerating ? (
                   <>
@@ -538,42 +538,47 @@ export default function GeneratorEnhanced() {
     );
   }
 
+  // State for mobile panels
+  const [showMobileFiles, setShowMobileFiles] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [activePanel, setActivePanel] = useState<'preview' | 'files' | 'chat'>('preview');
+
   // 3-Panel layout after generation
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-white/95 backdrop-blur-sm z-50">
-        <div className="max-w-full mx-auto px-4">
-          <div className="flex justify-between items-center py-3">
-            <div className="flex items-center space-x-4">
+      <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm z-50 flex-shrink-0">
+        <div className="max-w-full mx-auto px-2 sm:px-4">
+          <div className="flex justify-between items-center py-2 sm:py-3">
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
               {loadedProjectId ? (
-                <Button variant="ghost" onClick={() => setLocation('/projects')} className="text-gray-300 hover:text-white">
-                  <ChevronRight className="w-5 h-5 mr-2 rotate-180" />
-                  Back to Projects
+                <Button variant="ghost" onClick={() => setLocation('/projects')} className="text-gray-300 hover:text-white px-2 sm:px-4 flex-shrink-0">
+                  <ChevronRight className="w-5 h-5 sm:mr-2 rotate-180" />
+                  <span className="hidden sm:inline">Back to Projects</span>
                 </Button>
               ) : (
-                <Button variant="ghost" onClick={() => setProjectGenerated(false)} className="text-gray-300 hover:text-white">
-                  <ChevronRight className="w-5 h-5 mr-2 rotate-180" />
-                  New Project
+                <Button variant="ghost" onClick={() => setProjectGenerated(false)} className="text-gray-300 hover:text-white px-2 sm:px-4 flex-shrink-0">
+                  <ChevronRight className="w-5 h-5 sm:mr-2 rotate-180" />
+                  <span className="hidden sm:inline">New Project</span>
                 </Button>
               )}
-              <div className="flex items-center space-x-2">
-                <Sparkles className="w-6 h-6 text-purple-400" />
-                <span className="text-xl font-bold text-white">{projectName || 'Untitled Project'}</span>
+              <div className="flex items-center space-x-2 min-w-0">
+                <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400 flex-shrink-0" />
+                <span className="text-base sm:text-xl font-bold text-white truncate max-w-[120px] sm:max-w-none">{projectName || 'Untitled'}</span>
                 {loadedProjectId && (
-                  <Badge variant="outline" className="border-blue-500/30 text-blue-400">
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 hidden sm:inline-flex">
                     Loaded
                   </Badge>
                 )}
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Button onClick={handleDownload} variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Download
+            <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+              <Button onClick={handleDownload} variant="outline" size="sm" className="px-2 sm:px-4">
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Download</span>
               </Button>
-              <Button onClick={() => setLocation('/ide')} variant="outline" size="sm">
+              <Button onClick={() => setLocation('/ide')} variant="outline" size="sm" className="hidden sm:flex">
                 <Code className="w-4 h-4 mr-2" />
                 Open in IDE
               </Button>
@@ -582,11 +587,44 @@ export default function GeneratorEnhanced() {
         </div>
       </header>
 
-      {/* 3-Panel Layout */}
+      {/* Mobile Tab Bar */}
+      <div className="sm:hidden border-b border-gray-800 bg-gray-900 flex">
+        <button
+          onClick={() => setActivePanel('files')}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+            activePanel === 'files' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-gray-400'
+          }`}
+        >
+          <FileCode className="w-4 h-4" />
+          Files
+        </button>
+        <button
+          onClick={() => setActivePanel('preview')}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+            activePanel === 'preview' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-gray-400'
+          }`}
+        >
+          <Play className="w-4 h-4" />
+          Preview
+        </button>
+        <button
+          onClick={() => setActivePanel('chat')}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+            activePanel === 'chat' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-gray-400'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          AI
+        </button>
+      </div>
+
+      {/* 3-Panel Layout - Desktop */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Files */}
-        <div className="w-64 border-r border-gray-800 bg-gray-900 overflow-y-auto">
-          <div className="p-4">
+        {/* Left Panel - Files (Hidden on mobile unless active) */}
+        <div className={`${
+          activePanel === 'files' ? 'flex' : 'hidden'
+        } sm:flex w-full sm:w-56 lg:w-64 border-r border-gray-800 bg-gray-900 overflow-y-auto flex-col`}>
+          <div className="p-3 sm:p-4">
             <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center">
               <FileCode className="w-4 h-4 mr-2" />
               Files ({generatedFiles.length})
@@ -595,8 +633,14 @@ export default function GeneratorEnhanced() {
               {generatedFiles.map((file, index) => (
                 <button
                   key={index}
-                  onClick={() => setSelectedFile(file)}
-                  className={`w-full flex items-center space-x-2 p-2 rounded text-left transition-colors ${
+                  onClick={() => {
+                    setSelectedFile(file);
+                    // On mobile, switch to preview after selecting file
+                    if (window.innerWidth < 640) {
+                      setActivePanel('preview');
+                    }
+                  }}
+                  className={`w-full flex items-center space-x-2 p-2 rounded text-left transition-colors touch-target ${
                     selectedFile?.path === file.path
                       ? 'bg-purple-600/20 border border-purple-500/30'
                       : 'hover:bg-gray-800'
@@ -610,26 +654,28 @@ export default function GeneratorEnhanced() {
           </div>
         </div>
 
-        {/* Middle Panel - Preview */}
-        <div className="flex-1 bg-gray-950 flex flex-col">
-          <div className="border-b border-gray-800 bg-gray-900 p-3 flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <Play className="w-5 h-5 text-green-400" />
-              <span className="text-white font-medium">Live Preview</span>
+        {/* Middle Panel - Preview (Hidden on mobile unless active) */}
+        <div className={`${
+          activePanel === 'preview' ? 'flex' : 'hidden'
+        } sm:flex flex-1 bg-gray-950 flex-col min-w-0`}>
+          <div className="border-b border-gray-800 bg-gray-900 p-2 sm:p-3 flex justify-between items-center flex-shrink-0">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
+              <span className="text-white font-medium text-sm sm:text-base">Live Preview</span>
               {previewUrl && (
-                <Badge variant="outline" className="border-green-500/30 text-green-400">
+                <Badge variant="outline" className="border-green-500/30 text-green-400 hidden sm:inline-flex">
                   Running
                 </Badge>
               )}
             </div>
             
             {previewUrl && (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setPreviewMode('desktop')}
-                  className={previewMode === 'desktop' ? 'bg-gray-800' : ''}
+                  className={`hidden sm:flex ${previewMode === 'desktop' ? 'bg-gray-800' : ''}`}
                 >
                   <Monitor className="w-4 h-4" />
                 </Button>
@@ -637,27 +683,29 @@ export default function GeneratorEnhanced() {
                   size="sm"
                   variant="ghost"
                   onClick={() => setPreviewMode('mobile')}
-                  className={previewMode === 'mobile' ? 'bg-gray-800' : ''}
+                  className={`hidden sm:flex ${previewMode === 'mobile' ? 'bg-gray-800' : ''}`}
                 >
                   <Smartphone className="w-4 h-4" />
                 </Button>
-                <Button size="sm" variant="ghost" onClick={refreshPreview}>
+                <Button size="sm" variant="ghost" onClick={refreshPreview} className="touch-target-sm">
                   <RefreshCw className="w-4 h-4" />
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => window.open(previewUrl, '_blank')}>
+                <Button size="sm" variant="ghost" onClick={() => window.open(previewUrl, '_blank')} className="touch-target-sm">
                   <ExternalLink className="w-4 h-4" />
                 </Button>
               </div>
             )}
           </div>
 
-          <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex-1 flex items-center justify-center p-2 sm:p-6 overflow-auto">
             {previewUrl ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className={`bg-gray-900 rounded-lg shadow-2xl overflow-hidden ${
-                  previewMode === 'mobile' ? 'w-[375px] h-[667px]' : 'w-full h-full'
+                  previewMode === 'mobile' && window.innerWidth >= 640 
+                    ? 'w-[375px] h-[667px]' 
+                    : 'w-full h-full'
                 }`}
               >
                 <iframe
@@ -669,20 +717,22 @@ export default function GeneratorEnhanced() {
                 />
               </motion.div>
             ) : (
-              <div className="text-center">
-                <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Play className="w-12 h-12 text-gray-400" />
+              <div className="text-center p-4">
+                <div className="w-16 h-16 sm:w-24 sm:h-24 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Play className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-400 mb-2">No Preview</h3>
-                <p className="text-gray-500">Preview unavailable</p>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-400 mb-2">No Preview</h3>
+                <p className="text-gray-500 text-sm">Preview unavailable</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Panel - AI Chat */}
-        <div className="w-96 border-l border-gray-800 bg-gray-900 flex flex-col">
-          <div className="border-b border-gray-800 p-4">
+        {/* Right Panel - AI Chat (Hidden on mobile unless active) */}
+        <div className={`${
+          activePanel === 'chat' ? 'flex' : 'hidden'
+        } sm:flex w-full sm:w-80 lg:w-96 border-l border-gray-800 bg-gray-900 flex-col`}>
+          <div className="border-b border-gray-800 p-3 sm:p-4 flex-shrink-0">
             <h3 className="text-sm font-semibold text-gray-300 flex items-center">
               <MessageSquare className="w-4 h-4 mr-2" />
               AI Assistant
@@ -690,14 +740,14 @@ export default function GeneratorEnhanced() {
             <p className="text-xs text-gray-500 mt-1">Ask me to modify files or add features</p>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4 min-h-0">
             {chatMessages.map((message, index) => (
               <div
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg p-3 ${
+                  className={`max-w-[85%] sm:max-w-[80%] rounded-lg p-2.5 sm:p-3 ${
                     message.role === 'user'
                       ? 'bg-purple-600 text-white'
                       : 'bg-gray-800 text-gray-200'
@@ -720,7 +770,7 @@ export default function GeneratorEnhanced() {
             <div ref={chatEndRef} />
           </div>
 
-          <div className="border-t border-gray-800 p-4">
+          <div className="border-t border-gray-800 p-3 sm:p-4 flex-shrink-0 safe-area-inset">
             <div className="flex space-x-2">
               <Textarea
                 value={chatInput}
@@ -732,14 +782,14 @@ export default function GeneratorEnhanced() {
                   }
                 }}
                 placeholder="Ask AI to modify files..."
-                className="flex-1 bg-gray-800 border-gray-700 text-white resize-none"
-                rows={3}
+                className="flex-1 bg-gray-800 border-gray-700 text-white resize-none text-sm"
+                rows={2}
                 disabled={isChatLoading}
               />
               <Button
                 onClick={handleChatSubmit}
                 disabled={!chatInput.trim() || isChatLoading}
-                className="bg-purple-600 hover:bg-purple-700"
+                className="bg-purple-600 hover:bg-purple-700 touch-target"
               >
                 <Send className="w-4 h-4" />
               </Button>

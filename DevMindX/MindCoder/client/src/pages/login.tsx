@@ -190,7 +190,7 @@ export function LoginPage() {
   return (
     <div 
       ref={containerRef}
-      className="min-h-screen bg-white flex items-center justify-center relative overflow-hidden"
+      className="min-h-screen bg-white flex items-center justify-center relative overflow-hidden px-4 py-8 sm:px-6"
       style={{
         background: `radial-gradient(circle 800px at ${mousePosition.x}px ${mousePosition.y}px, rgba(59, 130, 246, 0.15), transparent 80%)`,
       }}
@@ -198,9 +198,9 @@ export function LoginPage() {
       {/* Animated background */}
       <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-black"></div>
       
-      {/* Glowing orb that follows cursor */}
+      {/* Glowing orb that follows cursor - hidden on mobile for performance */}
       <div
-        className="absolute pointer-events-none"
+        className="absolute pointer-events-none hidden sm:block"
         style={{
           left: mousePosition.x - 200,
           top: mousePosition.y - 200,
@@ -213,11 +213,11 @@ export function LoginPage() {
         }}
       />
 
-      {/* 3D Glass-like Icon */}
-      <div className="absolute top-32 left-1/2 transform -translate-x-1/2 mb-8 z-10">
+      {/* 3D Glass-like Icon - smaller on mobile */}
+      <div className="absolute top-16 sm:top-32 left-1/2 transform -translate-x-1/2 mb-8 z-10">
         <div className="relative">
           <div 
-            className="w-24 h-24 rounded-full relative"
+            className="w-16 h-16 sm:w-24 sm:h-24 rounded-full relative"
             style={{
               background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)',
               backdropFilter: 'blur(20px)',
@@ -227,12 +227,12 @@ export function LoginPage() {
           >
             <div className="absolute inset-2 rounded-full bg-gradient-to-br from-blue-400/20 to-purple-500/20 backdrop-blur-sm"></div>
             <div className="absolute inset-4 rounded-full bg-gradient-to-br from-blue-300/30 to-purple-400/30 backdrop-blur-sm"></div>
-            <div className="absolute top-2 left-2 w-4 h-4 bg-white/20 rounded-full blur-sm"></div>
+            <div className="absolute top-2 left-2 w-3 h-3 sm:w-4 sm:h-4 bg-white/20 rounded-full blur-sm"></div>
           </div>
         </div>
       </div>
 
-      <Card className="w-full max-w-md bg-white/40 backdrop-blur-xl border border-white/10 shadow-2xl relative z-10 mt-16">
+      <Card className="w-full max-w-md bg-white/40 backdrop-blur-xl border border-white/10 shadow-2xl relative z-10 mt-20 sm:mt-16 mx-2 sm:mx-0">
         <div
           className="absolute inset-0 rounded-lg"
           style={{
@@ -241,14 +241,14 @@ export function LoginPage() {
           }}
         />
         
-        <CardHeader className="text-center relative z-10">
-          <CardTitle className="text-3xl font-bold text-gray-900 mb-2">WELCOME BACK</CardTitle>
-          <CardDescription className="text-gray-600">
+        <CardHeader className="text-center relative z-10 p-4 sm:p-6">
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">WELCOME BACK</CardTitle>
+          <CardDescription className="text-gray-600 text-sm sm:text-base">
             Sign in to access your AI-powered development environment
           </CardDescription>
         </CardHeader>
         
-        <CardContent className="space-y-6 relative z-10">
+        <CardContent className="space-y-4 sm:space-y-6 relative z-10 p-4 sm:p-6 pt-0 sm:pt-0">
           {isVerifying ? (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -327,7 +327,7 @@ export function LoginPage() {
               <Button 
                 onClick={handleEmailLogin} 
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-gray-900 font-medium py-3 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-gray-900 font-medium py-3 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg touch-target"
               >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : ""} 
                 SIGN IN
@@ -342,28 +342,28 @@ export function LoginPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <Button 
                   variant="outline" 
                   onClick={() => handleOAuthLogin('github')}
-                  className="border-white/20 text-gray-700 hover:text-gray-900 hover:border-white/40 hover:bg-white/5 transition-all duration-300"
+                  className="border-white/20 text-gray-700 hover:text-gray-900 hover:border-white/40 hover:bg-white/5 transition-all duration-300 touch-target text-sm sm:text-base"
                 >
-                  <Github className="mr-2 h-4 w-4" /> 
+                  <Github className="mr-1 sm:mr-2 h-4 w-4" /> 
                   Github
                 </Button>
                 <Button 
                   variant="outline" 
                   onClick={() => handleOAuthLogin('google')}
-                  className="border-white/20 text-gray-700 hover:text-gray-900 hover:border-white/40 hover:bg-white/5 transition-all duration-300"
+                  className="border-white/20 text-gray-700 hover:text-gray-900 hover:border-white/40 hover:bg-white/5 transition-all duration-300 touch-target text-sm sm:text-base"
                 >
-                  <FaGoogle className="mr-2 h-4 w-4" /> 
+                  <FaGoogle className="mr-1 sm:mr-2 h-4 w-4" /> 
                   Google
                 </Button>
               </div>
             </>
           )}
 
-          <div className="text-center text-sm text-gray-600">
+          <div className="text-center text-xs sm:text-sm text-gray-600">
             Don't have an account?{" "}
             <button 
               onClick={() => navigate('/signup')} 
