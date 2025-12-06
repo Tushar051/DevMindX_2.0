@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "mongodb": "^6.18.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/nodemailer": "^6.4.17"
+  }
+}
