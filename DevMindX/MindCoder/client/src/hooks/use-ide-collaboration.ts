@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from './use-toast';
+import { SOCKET_URL } from '@/config/api';
 
 interface CollaborationUser {
   id: string;
@@ -43,7 +44,7 @@ export function useIDECollaboration() {
 
   // Initialize Socket.IO connection
   const connect = useCallback((token: string) => {
-    const newSocket = io('http://localhost:5000', {
+    const newSocket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket', 'polling']
     });

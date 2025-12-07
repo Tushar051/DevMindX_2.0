@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Participant, FileActivity, MeetingNote, MeetingData } from '../types/meeting';
+import { SOCKET_URL } from '@/config/api';
 
 // Re-export types for convenience
 export type { Participant, FileActivity, MeetingNote, MeetingData };
@@ -361,7 +362,7 @@ export function useVideoCall(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId) return;
     
-    const socket = io('http://localhost:5000', {
+    const socket = io(SOCKET_URL, {
       auth: { token: localStorage.getItem('devmindx_token') }
     });
     

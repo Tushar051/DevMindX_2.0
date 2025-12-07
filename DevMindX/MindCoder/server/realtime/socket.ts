@@ -40,13 +40,20 @@ function getNextColor(): string {
 }
 
 export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
+  // Parse allowed origins from environment
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+  const defaultOrigins = ['http://localhost:5173', 'http://localhost:5000'];
+  const origins = [...new Set([...defaultOrigins, ...allowedOrigins])].filter(Boolean);
+
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
-      credentials: true
+      origin: origins,
+      credentials: true,
+      methods: ['GET', 'POST']
     },
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
   });
 
   // Authentication middleware
