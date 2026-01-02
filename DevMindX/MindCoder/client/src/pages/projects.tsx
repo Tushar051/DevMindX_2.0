@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Folder, Code, ArrowRight, Search, Plus, Trash2, Download, FolderOpen } from 'lucide-react';
+import { Folder, Code, ArrowRight, Search, Plus, Trash2, Download, FolderOpen, Eye } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -302,11 +302,9 @@ export default function Projects() {
                         variant="outline"
                         size="sm"
                         className="border-gray-600 hover:bg-gray-700 text-purple-400 hover:text-purple-300 touch-target-sm flex-1 sm:flex-none"
-                        onClick={() => {
-                          window.location.href = `${window.location.origin}/#/generator?projectId=${project.id}`;
-                        }}
+                        onClick={() => navigate(`/generator?projectId=${project.id}`)}
                       >
-                        <Code className="w-4 h-4 sm:mr-1" />
+                        <Eye className="w-4 h-4 sm:mr-1" />
                         <span className="hidden sm:inline">Preview</span>
                       </Button>
                       <Button 

@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Zap, Code, Wand2, Rocket, Brain, ArrowRight, Play, Loader2, 
-  CheckCircle, Users, Share2, Copy, X, Home, FileCode, Folder, Download
+  CheckCircle, Users, Share2, Copy, X, Home, FileCode, Folder, Download,
+  Eye, Monitor, Smartphone, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useNavigate } from 'react-router-dom';
@@ -78,8 +79,14 @@ export default function Generator() {
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -91,6 +98,150 @@ export default function Generator() {
       navigate('/login');
     }
   }, [isAuthenticated, navigate, toast]);
+
+  // Load project from URL parameter
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const projectId = searchParams.get('projectId');
+    
+    if (projectId && isAuthenticated && !loadedProjectId) {
+      loadExistingProject(projectId);
+    }
+  }, [isAuthenticated, loadedProjectId]);
+
+  // Load existing project by ID
+  const loadExistingProject = async (projectId: string) => {
+    try {
+      setIsGenerating(true);
+      setLoadedProjectId(projectId);
+
+      const response = await fetch(`/api/projects/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to load project');
+
+      const project = await response.json();
+      
+      // Convert files to array format
+      const filesArray = Object.entries(project.files || {}).map(([path, content]) => ({
+        path,
+        content: content as string,
+        language: path.split('.').pop() || 'text'
+      }));
+      
+      setProjectName(project.name);
+      setFramework(project.framework || '');
+      setPrompt(project.description || '');
+      setGeneratedFiles(filesArray);
+      setSelectedFile(filesArray[0] || null);
+
+      toast({
+        title: '✅ Project Loaded!',
+        description: `${project.name} loaded with ${filesArray.length} files`,
+      });
+
+      // Auto-load preview
+      setTimeout(() => {
+        handleLoadPreviewForFiles(filesArray, project.name, project.description);
+      }, 500);
+
+    } catch (error) {
+      console.error('Error loading project:', error);
+      toast({
+        title: 'Load Failed',
+        description: 'Failed to load project. Please try again.',
+        variant: 'destructive',
+      });
+      setLoadedProjectId(null);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Helper to load preview for specific files
+  const handleLoadPreviewForFiles = async (files: GeneratedFile[], name: string, description: string) => {
+    if (files.length === 0) return;
+
+    setIsLoadingPreview(true);
+    setShowPreview(true);
+
+    // Local preview creation helper
+    const createPreviewHtml = (previewFiles: GeneratedFile[]): string => {
+      const htmlFile = previewFiles.find(f => f.path.endsWith('.html') || f.path.endsWith('index.html'));
+      const jsFiles = previewFiles.filter(f => f.path.endsWith('.js') || f.path.endsWith('.jsx') || f.path.endsWith('.ts') || f.path.endsWith('.tsx'));
+      const cssFiles = previewFiles.filter(f => f.path.endsWith('.css'));
+
+      let html = htmlFile?.content || `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${name || 'Preview'}</title>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="app"></div>
+</body>
+</html>`;
+      
+      if (cssFiles.length > 0) {
+        const cssContent = cssFiles.map(f => f.content).join('\n');
+        html = html.includes('</head>') 
+          ? html.replace('</head>', `<style>${cssContent}</style></head>`)
+          : `<style>${cssContent}</style>${html}`;
+      }
+      
+      if (jsFiles.length > 0) {
+        const jsContent = jsFiles.map(f => f.content).join('\n');
+        html = html.includes('</body>')
+          ? html.replace('</body>', `<script>${jsContent}</script></body>`)
+          : `${html}<script>${jsContent}</script>`;
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      return URL.createObjectURL(blob);
+    };
+
+    try {
+      const filesObject: Record<string, string> = {};
+      files.forEach(file => {
+        filesObject[file.path] = file.content;
+      });
+
+      const response = await fetch('/api/preview/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
+        body: JSON.stringify({
+          files: filesObject,
+          title: name || 'Generated Project',
+          description: description || ''
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.previewUrl) {
+          setPreviewUrl(data.previewUrl);
+        } else {
+          setPreviewUrl(createPreviewHtml(files));
+        }
+      } else {
+        setPreviewUrl(createPreviewHtml(files));
+      }
+    } catch (error) {
+      console.error('Preview error:', error);
+      setPreviewUrl(createPreviewHtml(files));
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -239,6 +390,138 @@ export default function Generator() {
 
   const handleOpenInIDE = () => {
     navigate('/ide');
+  };
+
+  // Create local preview from generated files
+  const createLocalPreview = (files: GeneratedFile[]): string => {
+    const htmlFile = files.find(f => f.path.endsWith('.html') || f.path.endsWith('index.html'));
+    const jsFiles = files.filter(f => f.path.endsWith('.js') || f.path.endsWith('.jsx') || f.path.endsWith('.ts') || f.path.endsWith('.tsx'));
+    const cssFiles = files.filter(f => f.path.endsWith('.css'));
+
+    let html = htmlFile?.content || `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${projectName || 'Preview'}</title>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="app"></div>
+</body>
+</html>`;
+    
+    // Inject CSS
+    if (cssFiles.length > 0) {
+      const cssContent = cssFiles.map(f => f.content).join('\n');
+      if (html.includes('</head>')) {
+        html = html.replace('</head>', `<style>${cssContent}</style></head>`);
+      } else {
+        html = `<style>${cssContent}</style>${html}`;
+      }
+    }
+    
+    // Inject JS
+    if (jsFiles.length > 0) {
+      const jsContent = jsFiles.map(f => f.content).join('\n');
+      if (html.includes('</body>')) {
+        html = html.replace('</body>', `<script>${jsContent}</script></body>`);
+      } else {
+        html = `${html}<script>${jsContent}</script>`;
+      }
+    }
+
+    const blob = new Blob([html], { type: 'text/html' });
+    return URL.createObjectURL(blob);
+  };
+
+  // Load preview from generated project
+  const handleLoadPreview = async () => {
+    if (generatedFiles.length === 0) {
+      toast({
+        title: 'No Files',
+        description: 'Generate a project first to preview it',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsLoadingPreview(true);
+    setShowPreview(true);
+
+    try {
+      // Try to create CodeSandbox preview first
+      const filesObject: Record<string, string> = {};
+      generatedFiles.forEach(file => {
+        filesObject[file.path] = file.content;
+      });
+
+      const response = await fetch('/api/preview/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
+        },
+        body: JSON.stringify({
+          files: filesObject,
+          title: projectName || 'Generated Project',
+          description: prompt
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.previewUrl) {
+          setPreviewUrl(data.previewUrl);
+          toast({
+            title: '🎉 Preview Ready!',
+            description: 'Live preview loaded successfully',
+          });
+        } else {
+          // Fallback to local preview
+          const localUrl = createLocalPreview(generatedFiles);
+          setPreviewUrl(localUrl);
+          toast({
+            title: 'Preview Ready',
+            description: 'Using local preview mode',
+          });
+        }
+      } else {
+        // Fallback to local preview
+        const localUrl = createLocalPreview(generatedFiles);
+        setPreviewUrl(localUrl);
+        toast({
+          title: 'Preview Ready',
+          description: 'Using local preview mode',
+        });
+      }
+    } catch (error) {
+      console.error('Preview error:', error);
+      // Fallback to local preview
+      const localUrl = createLocalPreview(generatedFiles);
+      setPreviewUrl(localUrl);
+      toast({
+        title: 'Preview Ready',
+        description: 'Using local preview mode',
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const refreshPreview = () => {
+    if (iframeRef.current && previewUrl) {
+      iframeRef.current.src = previewUrl;
+    }
+  };
+
+  const closePreview = () => {
+    setShowPreview(false);
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl('');
   };
 
   return (
@@ -446,6 +729,20 @@ export default function Generator() {
                       <div className="flex justify-between items-center">
                         <h3 className="text-xl font-bold text-white">Generated Files</h3>
                         <div className="flex space-x-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={handleLoadPreview}
+                            disabled={isLoadingPreview}
+                            className="border-green-500/50 text-green-300 hover:bg-green-500/20"
+                          >
+                            {isLoadingPreview ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4 mr-1" />
+                            )}
+                            Preview
+                          </Button>
                           <Button size="sm" variant="outline" onClick={handleDownloadProject}>
                             <Download className="w-4 h-4 mr-1" />
                             Download
@@ -603,6 +900,110 @@ export default function Generator() {
                 </div>
               )}
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Preview Modal */}
+      <AnimatePresence>
+        {showPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex flex-col"
+          >
+            {/* Preview Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-white/10">
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <Play className="w-5 h-5 text-green-400" />
+                  <span className="text-white font-semibold">Live Preview</span>
+                  {previewUrl && (
+                    <Badge className="bg-green-600/20 text-green-400 border-green-500/30">
+                      Running
+                    </Badge>
+                  )}
+                </div>
+                
+                {/* Device Toggle */}
+                <div className="flex items-center space-x-1 bg-white/5 rounded-lg p-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPreviewMode('desktop')}
+                    className={`px-3 py-1 ${previewMode === 'desktop' ? 'bg-white/10 text-white' : 'text-gray-400'}`}
+                  >
+                    <Monitor className="w-4 h-4 mr-1" />
+                    Desktop
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPreviewMode('mobile')}
+                    className={`px-3 py-1 ${previewMode === 'mobile' ? 'bg-white/10 text-white' : 'text-gray-400'}`}
+                  >
+                    <Smartphone className="w-4 h-4 mr-1" />
+                    Mobile
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button size="sm" variant="ghost" onClick={refreshPreview} className="text-gray-300 hover:text-white">
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
+                {previewUrl && !previewUrl.startsWith('blob:') && (
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={() => window.open(previewUrl, '_blank')}
+                    className="text-gray-300 hover:text-white"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={closePreview} className="text-gray-300 hover:text-white">
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+              {isLoadingPreview ? (
+                <div className="text-center">
+                  <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-300">Loading preview...</p>
+                </div>
+              ) : previewUrl ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={`bg-white rounded-lg shadow-2xl overflow-hidden ${
+                    previewMode === 'mobile' 
+                      ? 'w-[375px] h-[667px]' 
+                      : 'w-full max-w-6xl h-[80vh]'
+                  }`}
+                >
+                  <iframe
+                    ref={iframeRef}
+                    src={previewUrl}
+                    className="w-full h-full border-0"
+                    title="Project Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  />
+                </motion.div>
+              ) : (
+                <div className="text-center">
+                  <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Eye className="w-10 h-10 text-gray-500" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-400 mb-2">No Preview Available</h3>
+                  <p className="text-gray-500">Unable to generate preview for this project</p>
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
