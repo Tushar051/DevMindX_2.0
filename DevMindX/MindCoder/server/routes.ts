@@ -977,6 +977,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: String(importError)
           });
         }
+      } else if (description?.toLowerCase().includes('demo todo') || description?.toLowerCase().includes('todo app demo') || description?.toLowerCase().includes('demo taskmaster')) {
+        console.log('Using hardcoded demo Todo App project');
+        try {
+          const module = await import('./demo-projects/todo-app.js');
+          generatedProject = module.todoAppProject;
+        } catch (importError) {
+          console.error('Error importing todo app demo:', importError);
+          return res.status(500).json({ 
+            message: 'Failed to load demo project',
+            error: String(importError)
+          });
+        }
+      } else if (description?.toLowerCase().includes('demo weather') || description?.toLowerCase().includes('weather dashboard demo') || description?.toLowerCase().includes('demo weathernow')) {
+        console.log('Using hardcoded demo Weather Dashboard project');
+        try {
+          const module = await import('./demo-projects/weather-dashboard.js');
+          generatedProject = module.weatherDashboardProject;
+        } catch (importError) {
+          console.error('Error importing weather dashboard demo:', importError);
+          return res.status(500).json({ 
+            message: 'Failed to load demo project',
+            error: String(importError)
+          });
+        }
       } else {
         try {
           generatedProject = await generateProjectWithAI({
@@ -985,14 +1009,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
             framework,
             name
           });
-        } catch (aiError) {
+        } catch (aiError: any) {
           console.error('AI generation failed:', aiError);
-          // Return error with helpful message
-          return res.status(503).json({ 
-            message: 'AI service is temporarily unavailable. Please try again in a moment.',
-            error: aiError instanceof Error ? aiError.message : 'Unknown error',
-            suggestion: 'The AI model might be overloaded. Try again in 30 seconds.'
-          });
+          
+          // Check if it's a rate limit error - use fallback demo project
+          const errorMessage = aiError?.message || String(aiError);
+          if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+            console.log('API quota exceeded - using fallback demo project');
+            
+            // Select a demo project based on keywords in the description
+            const desc = description?.toLowerCase() || '';
+            let fallbackModule;
+            let fallbackName = 'Snake Game';
+            
+            if (desc.includes('todo') || desc.includes('task')) {
+              fallbackModule = await import('./demo-projects/todo-app.js');
+              generatedProject = fallbackModule.todoAppProject;
+              fallbackName = 'Todo App';
+            } else if (desc.includes('weather') || desc.includes('dashboard')) {
+              fallbackModule = await import('./demo-projects/weather-dashboard.js');
+              generatedProject = fallbackModule.weatherDashboardProject;
+              fallbackName = 'Weather Dashboard';
+            } else if (desc.includes('shop') || desc.includes('store') || desc.includes('ecommerce') || desc.includes('e-commerce')) {
+              fallbackModule = await import('./demo-projects/ecommerce-simple.js');
+              generatedProject = fallbackModule.ecommerceSimpleProject;
+              fallbackName = 'E-commerce Store';
+            } else if (desc.includes('social') || desc.includes('feed') || desc.includes('post')) {
+              fallbackModule = await import('./demo-projects/social-simple.js');
+              generatedProject = fallbackModule.socialSimpleProject;
+              fallbackName = 'Social Media App';
+            } else {
+              // Default to snake game
+              fallbackModule = await import('./demo-projects/snake-game.js');
+              generatedProject = fallbackModule.snakeGameProject;
+              fallbackName = 'Snake Game';
+            }
+            
+            console.log(`Using fallback demo project: ${fallbackName}`);
+          } else {
+            // Return error with helpful message for other errors
+            return res.status(503).json({ 
+              message: 'AI service is temporarily unavailable. Please try again in a moment.',
+              error: errorMessage,
+              suggestion: 'Try using a demo project by typing "demo snake", "demo todo", "demo weather", "demo ecommerce", or "demo social"'
+            });
+          }
         }
       }
 
