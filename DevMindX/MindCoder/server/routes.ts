@@ -596,6 +596,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/projects/demo/todo-app", authenticateToken, async (req: any, res) => {
+    try {
+      const module = await import('./demo-projects/todo-app.js');
+      const { todoAppProject } = module;
+      res.json({
+        ...todoAppProject,
+        id: 'demo-todo-app',
+        userId: req.user.id,
+        createdAt: new Date(),
+        isDemo: true
+      });
+    } catch (error) {
+      console.error('Get demo todo app error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      res.status(500).json({ message: errorMessage, error: String(error) });
+    }
+  });
+
+  app.get("/api/projects/demo/weather-dashboard", authenticateToken, async (req: any, res) => {
+    try {
+      const module = await import('./demo-projects/weather-dashboard.js');
+      const { weatherDashboardProject } = module;
+      res.json({
+        ...weatherDashboardProject,
+        id: 'demo-weather-dashboard',
+        userId: req.user.id,
+        createdAt: new Date(),
+        isDemo: true
+      });
+    } catch (error) {
+      console.error('Get demo weather dashboard error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      res.status(500).json({ message: errorMessage, error: String(error) });
+    }
+  });
+
+  // Get all demo projects list
+  app.get("/api/projects/demo", authenticateToken, async (req: any, res) => {
+    try {
+      const demoProjects = [
+        {
+          id: 'demo-snake-game',
+          name: 'Classic Snake Game',
+          description: 'A classic snake game built with HTML5 Canvas and JavaScript',
+          framework: 'web',
+          isDemo: true
+        },
+        {
+          id: 'demo-ecommerce',
+          name: 'Modern E-commerce Store',
+          description: 'A modern, responsive e-commerce store with product catalog',
+          framework: 'web',
+          isDemo: true
+        },
+        {
+          id: 'demo-social-app',
+          name: 'SocialHub - Social Media Platform',
+          description: 'A modern social media platform with posts and user profiles',
+          framework: 'web',
+          isDemo: true
+        },
+        {
+          id: 'demo-todo-app',
+          name: 'TaskMaster - Todo Application',
+          description: 'A full-featured task management app with categories and priorities',
+          framework: 'web',
+          isDemo: true
+        },
+        {
+          id: 'demo-weather-dashboard',
+          name: 'WeatherNow - Weather Dashboard',
+          description: 'An interactive weather dashboard with forecasts and animations',
+          framework: 'web',
+          isDemo: true
+        }
+      ];
+      res.json(demoProjects);
+    } catch (error) {
+      console.error('Get demo projects list error:', error);
+      res.status(500).json({ message: 'Failed to get demo projects' });
+    }
+  });
+
   // Chat history routes
   app.get("/api/chat/history", authenticateToken, async (req: any, res: any) => {
     try {
