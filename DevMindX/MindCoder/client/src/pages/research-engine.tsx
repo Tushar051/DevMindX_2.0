@@ -29,9 +29,12 @@ import {
   Rocket,
   ChevronRight,
   Star,
-  Info
+  Info,
+  FolderOpen,
+  Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import ProjectSelector from '@/components/ProjectSelector';
 
 interface ResearchSection {
   title: string;
@@ -62,6 +65,8 @@ export default function ResearchEngine() {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [loadedProject, setLoadedProject] = useState<{ name: string; id: string } | null>(null);
 
   const researchPhases = [
     { name: 'Analyzing Idea', icon: <Search className="w-5 h-5" />, color: 'from-blue-500 to-cyan-500' },
@@ -149,6 +154,25 @@ export default function ResearchEngine() {
     }
   };
 
+  const handleProjectSelect = (projectData: { 
+    project: { id: string; name: string; description: string }; 
+    files: any[];
+    fullContent: string;
+  }) => {
+    setLoadedProject({ name: projectData.project.name, id: projectData.project.id });
+    // Set the idea to include project info and code for research
+    const projectSummary = `Project: ${projectData.project.name}
+Description: ${projectData.project.description}
+
+=== PROJECT CODE ===
+${projectData.fullContent}`;
+    setIdea(projectSummary);
+    toast({
+      title: 'Project Loaded!',
+      description: `${projectData.project.name} is ready for research analysis`,
+    });
+  };
+
   const getComplexityColor = (complexity: string) => {
     switch (complexity) {
       case 'Simple': return 'bg-green-500/20 text-green-400 border-green-500/50';
@@ -213,9 +237,17 @@ export default function ResearchEngine() {
         >
           <Card className="bg-gray-800/50 border-gray-700 backdrop-blur-sm mb-8">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Lightbulb className="w-6 h-6 text-yellow-400" />
-                What's Your Project Idea?
+              <CardTitle className="text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-6 h-6 text-yellow-400" />
+                  What's Your Project Idea?
+                </div>
+                {loadedProject && (
+                  <Badge className="bg-green-500/20 text-green-400 border border-green-500/50">
+                    <FolderOpen className="w-4 h-4 mr-1" />
+                    {loadedProject.name}
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -228,14 +260,27 @@ Examples:
 • A social media platform for developers with code sharing and collaboration features
 • An e-commerce marketplace with AI-powered product recommendations
 • A project management tool with real-time collaboration and analytics
-• A fitness tracking app with personalized workout plans and nutrition guidance"
+• A fitness tracking app with personalized workout plans and nutrition guidance
+
+Or load an existing project from 'View Projects' to research it!"
                 className="w-full h-48 p-4 bg-white/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 disabled={isResearching}
               />
               
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-400">
-                  {idea.length}/2000 characters
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => setShowProjectSelector(true)}
+                    variant="outline"
+                    className="border-purple-500/50 hover:bg-purple-500/10 text-purple-300"
+                    disabled={isResearching}
+                  >
+                    <Upload className="w-5 h-5 mr-2" />
+                    Load from Projects
+                  </Button>
+                  <span className="text-sm text-gray-400">
+                    {idea.length}/2000 characters
+                  </span>
                 </div>
                 <Button
                   onClick={handleResearch}
@@ -573,6 +618,15 @@ Examples:
           </motion.div>
         )}
       </div>
+
+      {/* Project Selector Modal */}
+      <ProjectSelector
+        isOpen={showProjectSelector}
+        onClose={() => setShowProjectSelector(false)}
+        onProjectSelect={handleProjectSelect}
+        title="Load Project for Research"
+        description="Select a generated project to analyze and research"
+      />
     </div>
   );
 }

@@ -7,10 +7,12 @@ import { useAuth } from '@/hooks/use-auth';
 import {
   Network, Download, ArrowLeft, Loader2, Sparkles, Box,
   Database, GitBranch, Layers, Workflow, FileCode, Zap,
-  CheckCircle, Eye, Share2
+  CheckCircle, Eye, Share2, Upload, FolderOpen
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import ProjectSelector from '@/components/ProjectSelector';
 
 interface DiagramData {
   systemArchitecture: string;
@@ -33,6 +35,8 @@ export default function ArchitectureGenerator() {
   const [selectedDiagram, setSelectedDiagram] = useState<'system' | 'class' | 'er' | 'sequence' | 'api' | 'dataflow' | null>(null);
   const [activeTab, setActiveTab] = useState<'system' | 'class' | 'er' | 'sequence' | 'api' | 'dataflow'>('system');
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [loadedProject, setLoadedProject] = useState<{ name: string; id: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -160,6 +164,25 @@ ${architectureData.description}
     { id: 'api', label: 'REST API', icon: Workflow, color: 'from-yellow-500 to-orange-500' },
     { id: 'dataflow', label: 'Data Flow', icon: Layers, color: 'from-indigo-500 to-purple-500' }
   ];
+
+  const handleProjectSelect = (projectData: { 
+    project: { id: string; name: string; description: string }; 
+    files: any[];
+    fullContent: string;
+  }) => {
+    setLoadedProject({ name: projectData.project.name, id: projectData.project.id });
+    // Set the project input to include project info and code for architecture generation
+    const projectSummary = `Project: ${projectData.project.name}
+Description: ${projectData.project.description}
+
+=== PROJECT CODE ===
+${projectData.fullContent}`;
+    setProjectInput(projectSummary);
+    toast({
+      title: 'Project Loaded!',
+      description: `${projectData.project.name} is ready for architecture generation`,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 relative overflow-hidden">
@@ -325,9 +348,17 @@ ${architectureData.description}
             >
               <Card className="bg-gray-800/50 border-blue-500/30 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="text-3xl text-white flex items-center">
-                    <Sparkles className="w-8 h-8 mr-3 text-blue-400" />
-                    Generate Architecture Diagram
+                  <CardTitle className="text-3xl text-white flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Sparkles className="w-8 h-8 mr-3 text-blue-400" />
+                      Generate Architecture Diagram
+                    </div>
+                    {loadedProject && (
+                      <Badge className="bg-green-500/20 text-green-400 border border-green-500/50">
+                        <FolderOpen className="w-4 h-4 mr-1" />
+                        {loadedProject.name}
+                      </Badge>
+                    )}
                   </CardTitle>
                   <p className="text-gray-300 text-lg mt-2">
                     Step 1: Select diagram type • Step 2: Describe your project • Step 3: Generate
@@ -420,10 +451,11 @@ ${architectureData.description}
                       )}
                     </Button>
                     <Button
-                      onClick={() => setLocation('/projects')}
+                      onClick={() => setShowProjectSelector(true)}
                       variant="outline"
                       className="border-blue-500/50 text-white hover:bg-blue-500/10"
                     >
+                      <Upload className="w-5 h-5 mr-2" />
                       Load from Projects
                     </Button>
                   </div>
@@ -560,6 +592,15 @@ ${architectureData.description}
           )}
         </div>
       </div>
+
+      {/* Project Selector Modal */}
+      <ProjectSelector
+        isOpen={showProjectSelector}
+        onClose={() => setShowProjectSelector(false)}
+        onProjectSelect={handleProjectSelect}
+        title="Load Project for Architecture"
+        description="Select a generated project to create architecture diagrams"
+      />
     </div>
   );
 }

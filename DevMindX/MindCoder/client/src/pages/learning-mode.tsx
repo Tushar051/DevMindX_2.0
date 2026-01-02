@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import {
   BookOpen, Code, Download, FileText, Brain, Lightbulb,
   ArrowLeft, CheckCircle, Loader2, Sparkles, GitBranch,
-  MessageSquare, Award, Play, ChevronRight, Eye, Zap
+  MessageSquare, Award, Play, ChevronRight, Eye, Zap,
+  Upload, FolderOpen
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import ProjectSelector from '@/components/ProjectSelector';
 
 interface ExplanationSection {
   file: string;
@@ -59,6 +62,8 @@ export default function LearningMode() {
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [showQuizResults, setShowQuizResults] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [loadedProject, setLoadedProject] = useState<{ name: string; id: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -167,6 +172,20 @@ ${learningData.vivaQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
     toast({
       title: 'Quiz Complete!',
       description: `You got ${correct} out of ${learningData?.quiz.length} correct`
+    });
+  };
+
+  const handleProjectSelect = (projectData: { 
+    project: { id: string; name: string; description: string }; 
+    files: any[];
+    fullContent: string;
+  }) => {
+    setLoadedProject({ name: projectData.project.name, id: projectData.project.id });
+    // Set the project input to include all project code for learning
+    setProjectInput(projectData.fullContent);
+    toast({
+      title: 'Project Loaded!',
+      description: `${projectData.project.name} is ready for learning analysis`,
     });
   };
 
@@ -282,9 +301,17 @@ ${learningData.vivaQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
             >
               <Card className="bg-gray-800/50 border-purple-500/30 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="text-3xl text-white flex items-center">
-                    <Sparkles className="w-8 h-8 mr-3 text-purple-400" />
-                    Explain Your Project
+                  <CardTitle className="text-3xl text-white flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Sparkles className="w-8 h-8 mr-3 text-purple-400" />
+                      Explain Your Project
+                    </div>
+                    {loadedProject && (
+                      <Badge className="bg-green-500/20 text-green-400 border border-green-500/50">
+                        <FolderOpen className="w-4 h-4 mr-1" />
+                        {loadedProject.name}
+                      </Badge>
+                    )}
                   </CardTitle>
                   <p className="text-gray-300 text-lg mt-2">
                     Paste your project code or load a generated project to get comprehensive learning materials
@@ -294,7 +321,14 @@ ${learningData.vivaQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                   <Textarea
                     value={projectInput}
                     onChange={(e) => setProjectInput(e.target.value)}
-                    placeholder="Paste your project code here or describe what you want to learn..."
+                    placeholder="Paste your project code here or load an existing project to learn from it...
+
+The AI will analyze your code and generate:
+• Line-by-line explanations
+• Flow diagrams
+• Project summary
+• Quiz questions
+• Viva preparation questions"
                     className="min-h-[300px] bg-white/50 border-purple-500/30 text-white font-mono"
                   />
                   <div className="flex gap-4">
@@ -316,10 +350,11 @@ ${learningData.vivaQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                       )}
                     </Button>
                     <Button
-                      onClick={() => setLocation('/projects')}
+                      onClick={() => setShowProjectSelector(true)}
                       variant="outline"
                       className="border-purple-500/50 text-white hover:bg-purple-500/10"
                     >
+                      <Upload className="w-5 h-5 mr-2" />
                       Load from Projects
                     </Button>
                   </div>
@@ -607,6 +642,15 @@ ${learningData.vivaQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
           )}
         </div>
       </div>
+
+      {/* Project Selector Modal */}
+      <ProjectSelector
+        isOpen={showProjectSelector}
+        onClose={() => setShowProjectSelector(false)}
+        onProjectSelect={handleProjectSelect}
+        title="Load Project for Learning"
+        description="Select a generated project to learn from with AI explanations"
+      />
     </div>
   );
 }

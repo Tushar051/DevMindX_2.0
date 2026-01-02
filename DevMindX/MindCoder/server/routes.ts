@@ -1082,6 +1082,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get project files for AI analysis (Research Engine, Architecture Generator, Learning Mode)
+  app.get("/api/projects/:id/files", authenticateToken, async (req: any, res) => {
+    try {
+      const projectId = req.params.id;
+      const userId = req.user.id;
+      const normalizedUserId = typeof userId === 'string' ? userId : String(userId);
+
+      const storage = await getStorage();
+
+      // Get the project
+      const project = await storage.getProject(projectId);
+      const projectOwnerId = project?.userId ? String(project.userId) : undefined;
+
+      if (!project || projectOwnerId !== normalizedUserId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      // Get project files and format them for AI analysis
+      const files = project.files || {};
+      const formattedFiles = [];
+
+      // Helper to detect language from file extension
+      const getLanguage = (filename: string): string => {
+        const ext = filename.split('.').pop()?.toLowerCase() || '';
+        const langMap: Record<string, string> = {
+          'js': 'javascript',
+          'jsx': 'javascript',
+          'ts': 'typescript',
+          'tsx': 'typescript',
+          'py': 'python',
+          'java': 'java',
+          'cpp': 'cpp',
+          'c': 'c',
+          'html': 'html',
+          'css': 'css',
+          'json': 'json',
+          'md': 'markdown',
+          'sql': 'sql',
+          'sh': 'bash',
+          'yml': 'yaml',
+          'yaml': 'yaml'
+        };
+        return langMap[ext] || 'text';
+      };
+
+      for (const [filePath, fileContent] of Object.entries(files)) {
+        if (fileContent && typeof fileContent === 'string') {
+          formattedFiles.push({
+            name: filePath.split('/').pop() || filePath,
+            path: filePath,
+            content: fileContent,
+            language: getLanguage(filePath)
+          });
+        }
+      }
+
+      res.json({
+        project: {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          framework: project.framework
+        },
+        files: formattedFiles,
+        totalFiles: formattedFiles.length
+      });
+    } catch (error) {
+      console.error('Get project files error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      res.status(500).json({ message: errorMessage });
+    }
+  });
+
   // Load a project's files into the IDE workspace
   app.get("/api/projects/:id/load", authenticateToken, async (req: any, res) => {
     try {
