@@ -8,7 +8,7 @@ import {
   Sparkles, Zap, Code, Loader2, CheckCircle, Home, 
   FileCode, Download, Play, Smartphone, Monitor,
   RefreshCw, ExternalLink, FolderOpen, Send, MessageSquare,
-  ChevronRight, File, Folder, X
+  ChevronRight, File
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useLocation } from 'wouter';
@@ -50,6 +50,9 @@ export default function GeneratorEnhanced() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  
+  // Mobile panel state - must be at top level with other hooks
+  const [activePanel, setActivePanel] = useState<'preview' | 'files' | 'chat'>('preview');
   
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -537,11 +540,6 @@ export default function GeneratorEnhanced() {
       </div>
     );
   }
-
-  // State for mobile panels
-  const [showMobileFiles, setShowMobileFiles] = useState(false);
-  const [showMobileChat, setShowMobileChat] = useState(false);
-  const [activePanel, setActivePanel] = useState<'preview' | 'files' | 'chat'>('preview');
 
   // 3-Panel layout after generation
   return (
