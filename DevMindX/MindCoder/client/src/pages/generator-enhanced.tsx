@@ -13,6 +13,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { useLocation } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
+import { DemoProjectsNotice } from '@/components/DemoProjectsNotice';
 
 interface GeneratedFile {
   path: string;
@@ -468,7 +469,7 @@ export default function GeneratorEnhanced() {
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="I want to build a modern todo app with drag & drop, categories, due dates, and a beautiful dark theme..."
+                  placeholder="Try typing: demo snake, demo todo, demo weather, demo ecommerce, or demo social"
                   className="min-h-[150px] sm:min-h-[200px] bg-gray-800 border-gray-700 text-white placeholder-gray-500 resize-none text-sm sm:text-base"
                   disabled={isGenerating}
                 />
@@ -478,6 +479,9 @@ export default function GeneratorEnhanced() {
                   </span>
                 </div>
               </div>
+
+              {/* Demo Projects Notice */}
+              <DemoProjectsNotice />
 
               <Button
                 onClick={handleGenerate}
@@ -492,7 +496,7 @@ export default function GeneratorEnhanced() {
                 ) : (
                   <>
                     <Zap className="w-5 h-5 mr-2" />
-                    Generate Project
+                    Generate Demo Project
                   </>
                 )}
               </Button>

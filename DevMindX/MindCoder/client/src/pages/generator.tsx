@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useCollab } from '@/hooks/use-collab';
 import { UserPresence } from '@/components/UserPresence';
+import { DemoProjectsNotice } from '@/components/DemoProjectsNotice';
 
 // 3D Animated Background Component
 function AnimatedSphere() {
@@ -647,7 +648,7 @@ export default function Generator() {
                       ref={textareaRef}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder="I want to build a modern e-commerce platform with product catalog, shopping cart, user authentication, payment integration, and an admin dashboard..."
+                      placeholder="Try typing: demo snake, demo todo, demo weather, demo ecommerce, or demo social"
                       className="min-h-[200px] bg-white/5 border-white/10 text-white placeholder-gray-500 resize-none"
                       disabled={isGenerating}
                     />
@@ -657,6 +658,9 @@ export default function Generator() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Demo Projects Notice */}
+                  <DemoProjectsNotice />
 
                   <Button
                     onClick={handleGenerate}
@@ -671,7 +675,7 @@ export default function Generator() {
                     ) : (
                       <>
                         <Zap className="w-5 h-5 mr-2" />
-                        Generate Project
+                        Generate Demo Project
                       </>
                     )}
                   </Button>
