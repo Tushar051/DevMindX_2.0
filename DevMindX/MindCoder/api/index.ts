@@ -1,20 +1,21 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from '../server/routes.js';
-import { serveStatic } from "../server/vite.js";
+import path from 'path';
 
 const app = express();
-const isProduction = true; // Always production on Vercel
 
-// Production security headers
+// Trust proxy for Vercel
+app.set('trust proxy', 1);
+
+// Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   
-  // CORS for production
+  // CORS
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
@@ -27,9 +28,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Trust proxy for Vercel
-app.set('trust proxy', 1);
-
 // Request body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
@@ -37,39 +35,42 @@ app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 // Request logging
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      console.log(logLine);
+    if (req.path.startsWith("/api")) {
+      console.log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`);
     }
   });
-
   next();
 });
 
 // Initialize routes
-(async () => {
-  await registerRoutes(app);
-  serveStatic(app);
+let routesInitialized = false;
+const initPromise = (async () => {
+  if (!routesInitialized) {
+    await registerRoutes(app);
+    
+    // Serve static files from dist/public
+    const publicPath = path.join(process.cwd(), 'dist', 'public');
+    app.use(express.static(publicPath));
+    
+    // SPA fallback - serve index.html for all non-API routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      res.sendFile(path.join(publicPath, 'index.html'));
+    });
+    
+    routesInitialized = true;
+  }
 })();
+
+// Middleware to ensure routes are initialized
+app.use(async (req, res, next) => {
+  await initPromise;
+  next();
+});
 
 // Error handling
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
