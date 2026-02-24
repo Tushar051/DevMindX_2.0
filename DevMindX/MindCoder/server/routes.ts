@@ -461,7 +461,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // OAuth routes
   app.get('/api/auth/google', (req, res) => {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      return res.redirect('/?error=oauth_not_configured&provider=google');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}/?error=oauth_not_configured&provider=google`);
     }
     passport.authenticate('google', { scope: ['profile', 'email'] })(req, res);
   });
@@ -469,20 +470,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/google/callback',
     (req, res, next) => {
       if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-        return res.redirect('/?error=oauth_not_configured&provider=google');
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        return res.redirect(`${frontendUrl}/?error=oauth_not_configured&provider=google`);
       }
-      passport.authenticate('google', { failureRedirect: '/?error=auth_failed' })(req, res, next);
+      passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/?error=auth_failed` })(req, res, next);
     },
     (req, res) => {
       const user = req.user as any;
       const token = generateToken(user);
-      res.redirect(`/?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, username: user.username, email: user.email }))}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, username: user.username, email: user.email }))}`);
     }
   );
 
   app.get('/api/auth/github', (req, res) => {
     if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-      return res.redirect('/?error=oauth_not_configured&provider=github');
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}/?error=oauth_not_configured&provider=github`);
     }
     passport.authenticate('github', { scope: ['user:email'] })(req, res);
   });
@@ -490,14 +494,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/github/callback',
     (req, res, next) => {
       if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-        return res.redirect('/?error=oauth_not_configured&provider=github');
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        return res.redirect(`${frontendUrl}/?error=oauth_not_configured&provider=github`);
       }
-      passport.authenticate('github', { failureRedirect: '/?error=auth_failed' })(req, res, next);
+      passport.authenticate('github', { failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/?error=auth_failed` })(req, res, next);
     },
     (req, res) => {
       const user = req.user as any;
       const token = generateToken(user);
-      res.redirect(`/?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, username: user.username, email: user.email }))}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user.id, username: user.username, email: user.email }))}`);
     }
   );
 

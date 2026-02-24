@@ -170,8 +170,9 @@ export function SignupPage() {
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
     try {
-      // Direct redirect to OAuth endpoint
-      window.location.href = `/api/auth/${provider}`;
+      // Use the API base URL from config for OAuth
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      window.location.href = `${apiUrl}/api/auth/${provider}`;
     } catch (error) {
       toast({
         title: "OAuth Error", 
