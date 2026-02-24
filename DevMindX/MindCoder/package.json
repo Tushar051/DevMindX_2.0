@@ -75,6 +75,7 @@
     "drizzle-orm": "^0.39.1",
     "drizzle-zod": "^0.7.0",
     "esbuild": "^0.25.0",
+    "eslint": "^9.36.0",
     "embla-carousel-react": "^8.6.0",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
@@ -146,7 +147,6 @@
     "@types/ws": "^8.18.1",
     "cross-env": "^7.0.3",
     "drizzle-kit": "^0.30.4",
-    "eslint": "^9.36.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"
