@@ -5,24 +5,10 @@
   "installCommand": "npm install",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
-    },
-    {
-      "source": "/socket.io/:path*",
-      "destination": "/api/socket"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/**/*.js": {
-      "memory": 1024,
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/assets/(.*)",
