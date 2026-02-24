@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from '../server/routes.js';
-import path from 'path';
 
 const app = express();
 
@@ -13,13 +12,12 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
   // CORS
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['*'];
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  if (origin && (allowedOrigins.includes('*') || allowedOrigins.includes(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -37,9 +35,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (req.path.startsWith("/api")) {
-      console.log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`);
-    }
+    console.log(`${req.method} ${req.path} ${res.statusCode} in ${duration}ms`);
   });
   next();
 });
@@ -49,19 +45,6 @@ let routesInitialized = false;
 const initPromise = (async () => {
   if (!routesInitialized) {
     await registerRoutes(app);
-    
-    // Serve static files from dist/public
-    const publicPath = path.join(process.cwd(), 'dist', 'public');
-    app.use(express.static(publicPath));
-    
-    // SPA fallback - serve index.html for all non-API routes
-    app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api')) {
-        return next();
-      }
-      res.sendFile(path.join(publicPath, 'index.html'));
-    });
-    
     routesInitialized = true;
   }
 })();
