@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
 import { PaymentDialog } from '@/components/PaymentDialog';
+import { apiUrl } from '@/config/api';
 import {
   UserIcon, CreditCardIcon, ActivityIcon, LogOutIcon,
   CheckCircleIcon, XCircleIcon, ClockIcon, TrendingUpIcon
@@ -67,7 +68,7 @@ export default function AccountPage() {
       setUser(userData);
 
       // Get LLM models and usage
-      const modelsResponse = await fetch('/api/llm/models', {
+      const modelsResponse = await fetch(apiUrl('/api/llm/models'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
           'x-user-id': userData.id.toString()
