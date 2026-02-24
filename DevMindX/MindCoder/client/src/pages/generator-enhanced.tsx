@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useLocation } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 import { DemoProjectsNotice } from '@/components/DemoProjectsNotice';
+import { apiUrl } from '@/config/api';
 
 interface GeneratedFile {
   path: string;
@@ -214,7 +215,7 @@ export default function GeneratorEnhanced() {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      const response = await fetch('/api/projects/generate', {
+      const response = await fetch(apiUrl('/api/projects/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
