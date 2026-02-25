@@ -108,6 +108,27 @@ const terminalSessions = new Map<string, TerminalSession>();
 export async function registerRoutes(app: Express): Promise<Server> {
   const server = createServer(app);
 
+  // Health check endpoint - must be first
+  app.get('/api/health', async (req, res) => {
+    try {
+      const db = await connectToMongoDB();
+      await db.command({ ping: 1 });
+      res.json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        mongodb: 'connected',
+        environment: process.env.NODE_ENV || 'development'
+      });
+    } catch (error) {
+      res.status(503).json({ 
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        mongodb: 'disconnected',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Session configuration
   app.use(session({
     secret: process.env.SESSION_SECRET || 'devmindx-session-secret',

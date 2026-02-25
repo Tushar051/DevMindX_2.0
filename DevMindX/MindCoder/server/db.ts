@@ -44,32 +44,44 @@ export function createMongoIdFilter(userId: string | number | ObjectId): { _id: 
 }
 
 // MongoDB connection
-const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const mongoUri = process.env.MONGODB_URI;
 const mongoDbName = process.env.MONGODB_DB || 'devmindx';
 
 let mongoClient: MongoClient | null = null;
 let cachedMongoDb: Db | null = null;
 
 async function connectToMongoDB(): Promise<Db> {
+  // Check if MongoDB URI is configured
+  if (!mongoUri) {
+    throw new Error('MONGODB_URI environment variable is not set. Please configure MongoDB connection.');
+  }
+
   // Return cached connection if available
   if (cachedMongoDb) {
     return cachedMongoDb;
   }
 
   if (!mongoClient) {
-    // Configure TLS based on URI and environment
-    const isSrv = mongoUri.startsWith('mongodb+srv://');
-    const envTls = process.env.MONGODB_TLS;
-    const tlsEnabled = envTls === 'true' ? true : envTls === 'false' ? false : isSrv;
-    const mongoOptions: any = {
-      // Only enable TLS by default for Atlas (mongodb+srv). Allow override with MONGODB_TLS
-      tls: tlsEnabled,
-    };
+    try {
+      // Configure TLS based on URI and environment
+      const isSrv = mongoUri.startsWith('mongodb+srv://');
+      const envTls = process.env.MONGODB_TLS;
+      const tlsEnabled = envTls === 'true' ? true : envTls === 'false' ? false : isSrv;
+      const mongoOptions: any = {
+        // Only enable TLS by default for Atlas (mongodb+srv). Allow override with MONGODB_TLS
+        tls: tlsEnabled,
+        serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+        connectTimeoutMS: 10000,
+      };
 
-    mongoClient = new MongoClient(mongoUri, mongoOptions);
-    await mongoClient.connect();
-    cachedMongoDb = mongoClient.db(mongoDbName);
-    console.log('Connected to MongoDB');
+      mongoClient = new MongoClient(mongoUri, mongoOptions);
+      await mongoClient.connect();
+      cachedMongoDb = mongoClient.db(mongoDbName);
+      console.log('✅ Connected to MongoDB successfully');
+    } catch (error) {
+      console.error('❌ Failed to connect to MongoDB:', error);
+      throw new Error(`MongoDB connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
   
   return cachedMongoDb!;

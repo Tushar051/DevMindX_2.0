@@ -9,38 +9,45 @@ import { connectToMongoDB } from './db.js';
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Production security headers
+// Trust proxy for production (behind load balancer)
 if (isProduction) {
-  app.use((req, res, next) => {
-    // CORS for production
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['https://devmindx.vercel.app'];
-    const origin = req.headers.origin;
-    
-    if (origin && allowedOrigins.includes(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id');
-    }
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
-    }
-    
-    // Security headers
+  app.set('trust proxy', 1);
+}
+
+// CORS Configuration - Apply to all environments
+app.use((req, res, next) => {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    'https://devmindx.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5000'
+  ];
+  const origin = req.headers.origin;
+  
+  // Allow requests from allowed origins or if no origin (same-origin)
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, X-Requested-With');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  // Security headers for production
+  if (isProduction) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    
-    next();
-  });
+  }
   
-  // Trust proxy for production (behind load balancer)
-  app.set('trust proxy', 1);
-}
+  next();
+});
 
 // Request body parsing with limits
 app.use(express.json({ limit: '50mb' }));
