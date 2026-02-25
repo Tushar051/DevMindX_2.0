@@ -63,15 +63,19 @@ async function connectToMongoDB(): Promise<Db> {
 
   if (!mongoClient) {
     try {
-      // Configure TLS based on URI and environment
-      const isSrv = mongoUri.startsWith('mongodb+srv://');
-      const envTls = process.env.MONGODB_TLS;
-      const tlsEnabled = envTls === 'true' ? true : envTls === 'false' ? false : isSrv;
+      // Configure connection options for MongoDB Atlas
       const mongoOptions: any = {
-        // Only enable TLS by default for Atlas (mongodb+srv). Allow override with MONGODB_TLS
-        tls: tlsEnabled,
-        serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+        tls: true,
+        tlsAllowInvalidCertificates: false,
+        tlsAllowInvalidHostnames: false,
+        serverSelectionTimeoutMS: 10000,
         connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        retryWrites: true,
+        retryReads: true,
+        w: 'majority'
       };
 
       mongoClient = new MongoClient(mongoUri, mongoOptions);
@@ -80,6 +84,8 @@ async function connectToMongoDB(): Promise<Db> {
       console.log('✅ Connected to MongoDB successfully');
     } catch (error) {
       console.error('❌ Failed to connect to MongoDB:', error);
+      mongoClient = null;
+      cachedMongoDb = null;
       throw new Error(`MongoDB connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
