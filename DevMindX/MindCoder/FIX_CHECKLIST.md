@@ -7,32 +7,61 @@
 
 ## Solution: Use Vercel for Everything
 
-### ✅ Step 1: Set Environment Variables in Vercel (5 min)
+### ✅ Step 1: Choose Database & Set Environment Variables (10 min)
+
+**CRITICAL:** Local MongoDB won't work with Vercel! Choose one:
+
+#### Option A: Use Supabase (EASIEST - You already have it!) ⭐
 
 1. Go to: https://vercel.com/dashboard
 2. Click on your "devmindx" project
 3. Go to: Settings → Environment Variables
-4. Add these CRITICAL variables:
+4. Add these variables:
 
 ```
-MONGODB_URI = mongodb+srv://your_connection_string
-MONGODB_DB = devmindx
-MONGODB_TLS = true
+# Database - Supabase (you already have this!)
+SUPABASE_URL = https://csexvydhnfulvfezqoit.supabase.co
+SUPABASE_ANON_KEY = sb_publishable_jP6ckQqg1jIo7vK6Ew6rDQ_oUK5x97c
+SUPABASE_SERVICE_KEY = sb_secret_u5sZieMAw8KnLpMP6Ma2MA_50VgxIFP
 
+# AI Services
 GEMINI_API_KEY = AIzaSyCgPrayZtswmC0q9Meb8CLe-MvVYqlnrGU
 TOGETHER_API_KEY = c8cab5691fed977960bb96539b28ef07d56cba6abaa50f88f46b82552027bc5a
+CODESANDBOX_API_TOKEN = csb_v1_aqrKiblTMIUdE8Iq85n58L6SqR7AcHazALm9QXuc-Eg
 
+# Authentication
 JWT_SECRET = QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm1234567890QWERTYUIOPASDFGHJKLZXCVBNM
-SESSION_SECRET = your_random_32_char_string
+JWT_EXPIRATION = 86400000
+SESSION_SECRET = QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm1234567890
 
+# OAuth
+GOOGLE_CLIENT_ID = 692286091038-bdol7pqup20k9mv98jgk4icijkhmoa8o.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET = 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
 GOOGLE_CALLBACK_URL = https://devmindx.vercel.app/api/auth/google/callback
+GITHUB_CLIENT_ID = Ov23li1DxFPHl6zgI6zE
+GITHUB_CLIENT_SECRET = afbe9fbc6db18f06f7ca89c5f3180e645f4dbac1
 GITHUB_CALLBACK_URL = https://devmindx.vercel.app/api/auth/github/callback
 
+# Email
+EMAIL_USER = webdevx.ai@gmail.com
+EMAIL_PASS = hjowcklyhohvanfe
+FORCE_EMAIL = true
+
+# URLs
 FRONTEND_URL = https://devmindx.vercel.app
 ALLOWED_ORIGINS = https://devmindx.vercel.app
 
+# Environment
 NODE_ENV = production
+PORT = 5000
 ```
+
+#### Option B: Use MongoDB Atlas (Free Cloud MongoDB)
+
+See `MONGODB_ATLAS_SETUP.md` for step-by-step guide to:
+1. Create free MongoDB Atlas account
+2. Get connection string
+3. Set `MONGODB_URI` in Vercel
 
 **Note:** See `setup-vercel-env.bat` for complete list
 
@@ -136,14 +165,23 @@ curl https://devmindx.vercel.app/api/llm/models
 
 ### Database Connection Errors?
 
-1. **MongoDB:**
-   - Verify connection string format
-   - Check MongoDB Atlas → Network Access → Allow all IPs (0.0.0.0/0)
-   - Verify database user has read/write permissions
+**IMPORTANT:** Local MongoDB won't work with Vercel!
 
-2. **Supabase (alternative):**
-   - Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`
-   - Don't need MongoDB if using Supabase
+1. **If using Supabase (RECOMMENDED):**
+   - Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` in Vercel
+   - Don't set `MONGODB_URI`
+   - Your code already supports Supabase!
+
+2. **If using MongoDB Atlas:**
+   - Follow `MONGODB_ATLAS_SETUP.md` to create free cloud database
+   - Get connection string from Atlas
+   - Set `MONGODB_URI` in Vercel
+   - Format: `mongodb+srv://user:pass@cluster.mongodb.net/devmindx`
+
+3. **Cannot use local MongoDB:**
+   - `mongodb://localhost:27017` won't work in production
+   - Vercel runs in the cloud, can't access your computer
+   - Must use cloud database (Atlas or Supabase)
 
 ## Quick Commands
 
