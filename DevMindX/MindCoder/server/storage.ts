@@ -427,7 +427,7 @@ class MongoStorage implements IStorage {
     }
 
     await db.collection('users').updateOne(
-      filter,
+      filter as any,
       { $set: newUpdates }
     );
     const updatedUser = await db.collection('users').findOne(filter as any);
