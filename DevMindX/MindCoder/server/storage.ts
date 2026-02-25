@@ -258,7 +258,7 @@ class MongoStorage implements IStorage {
   async getUser(id: number | string): Promise<User | undefined> {
     const db = await connectToMongoDB();
     const filter = createMongoIdFilter(id);
-    const user = await db.collection('users').findOne(filter);
+    const user = await db.collection('users').findOne(filter as any);
     if (!user) return undefined;
     return {
       id: user._id.toString(),
@@ -279,7 +279,7 @@ class MongoStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ email });
+    const user = await db.collection('users').findOne({ email } as any);
     if (!user) return undefined;
     return {
       id: user._id.toString(),
@@ -300,7 +300,7 @@ class MongoStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ username });
+    const user = await db.collection('users').findOne({ username } as any);
     if (!user) return undefined;
     return {
       id: user._id.toString(),
@@ -321,7 +321,7 @@ class MongoStorage implements IStorage {
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ googleId });
+    const user = await db.collection('users').findOne({ googleId } as any);
     if (!user) return undefined;
     return {
       id: user._id.toString(),
@@ -342,7 +342,7 @@ class MongoStorage implements IStorage {
 
   async getUserByGithubId(githubId: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ githubId });
+    const user = await db.collection('users').findOne({ githubId } as any);
     if (!user) return undefined;
     return {
       id: user._id.toString(),
@@ -405,7 +405,7 @@ class MongoStorage implements IStorage {
   async updateUser(id: number | string, updates: Partial<User>): Promise<User> {
     const db = await connectToMongoDB();
     const filter = createMongoIdFilter(id);
-    const existingUser = await db.collection('users').findOne(filter);
+    const existingUser = await db.collection('users').findOne(filter as any);
     if (!existingUser) throw new Error('User not found');
 
     const newUpdates: Partial<User> = { ...updates };
@@ -430,7 +430,7 @@ class MongoStorage implements IStorage {
       filter,
       { $set: newUpdates }
     );
-    const updatedUser = await db.collection('users').findOne(filter);
+    const updatedUser = await db.collection('users').findOne(filter as any);
     if (!updatedUser) throw new Error('User not found');
     // Explicitly map all properties to ensure full User object is returned
     return {
@@ -452,10 +452,10 @@ class MongoStorage implements IStorage {
 
   async verifyUser(token: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
-    const user = await db.collection('users').findOne({ verificationToken: token });
+    const user = await db.collection('users').findOne({ verificationToken: token } as any);
     if (user) {
       await db.collection('users').updateOne({ _id: user._id }, { $set: { isVerified: true, verificationToken: null } });
-      const verifiedUser = await db.collection('users').findOne({ _id: user._id });
+      const verifiedUser = await db.collection('users').findOne({ _id: user._id } as any);
       if (!verifiedUser) return undefined;
       return { 
         id: verifiedUser._id.toString(),
@@ -480,7 +480,7 @@ class MongoStorage implements IStorage {
   async getProject(id: string): Promise<Project | undefined> {
     const db = await connectToMongoDB();
     // Assuming project ID is stored as _id in MongoDB for projects collection
-    const project = await db.collection('projects').findOne({ _id: new ObjectId(id) });
+    const project = await db.collection('projects').findOne({ _id: new ObjectId(id) } as any);
     if (!project) return undefined;
     return {
       id: project._id.toString(),
@@ -548,7 +548,7 @@ class MongoStorage implements IStorage {
       { _id: new ObjectId(id) },
       { $set: updateDoc }
     );
-    const updatedProject = await db.collection('projects').findOne({ _id: new ObjectId(id) });
+    const updatedProject = await db.collection('projects').findOne({ _id: new ObjectId(id) } as any);
     if (!updatedProject) throw new Error('Project not found');
     return {
       id: updatedProject._id.toString(),
@@ -571,7 +571,7 @@ class MongoStorage implements IStorage {
   async getChatSession(id: string): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
     // Assuming chat session ID is stored as _id
-    const session = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) });
+    const session = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) } as any);
     if (!session) return undefined;
     return {
       id: session._id.toString(),
@@ -598,7 +598,7 @@ class MongoStorage implements IStorage {
   async getProjectChatSession(projectId: string): Promise<ChatSession | undefined> {
     const db = await connectToMongoDB();
     const projectKey = ObjectId.isValid(projectId) ? new ObjectId(projectId) : projectId;
-    const session = await db.collection('chatSessions').findOne({ projectId: projectKey });
+    const session = await db.collection('chatSessions').findOne({ projectId: projectKey } as any);
     if (!session) return undefined;
     return {
       id: session._id.toString(),
@@ -639,7 +639,7 @@ class MongoStorage implements IStorage {
     }
 
     await db.collection('chatSessions').updateOne({ _id: new ObjectId(id) }, { $set: updateDoc });
-    const updatedSession = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) });
+    const updatedSession = await db.collection('chatSessions').findOne({ _id: new ObjectId(id) } as any);
     if (!updatedSession) throw new Error('Chat session not found');
     return {
       id: updatedSession._id.toString(),
@@ -671,7 +671,7 @@ class MongoStorage implements IStorage {
       { path }, 
       { $set: { ...updates, updatedAt: new Date() } }
     );
-    const updatedFile = await db.collection('files').findOne({ path });
+    const updatedFile = await db.collection('files').findOne({ path } as any);
     if (!updatedFile) throw new Error('File not found');
     return updatedFile;
   }
@@ -687,7 +687,7 @@ class MongoStorage implements IStorage {
       { path: oldPath },
       { $set: { path: newPath, updatedAt: new Date() } }
     );
-    const renamedFile = await db.collection('files').findOne({ path: newPath });
+    const renamedFile = await db.collection('files').findOne({ path: newPath } as any);
     if (!renamedFile) throw new Error('File not found');
     return renamedFile;
   }
