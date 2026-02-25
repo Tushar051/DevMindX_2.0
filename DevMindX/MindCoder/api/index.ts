@@ -55,48 +55,60 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Initialize database and routes
-let routesInitialized = false;
-let initError: Error | null = null;
-
-const initPromise = (async () => {
-  if (!routesInitialized) {
-    try {
-      console.log('Connecting to MongoDB...');
-      await connectToMongoDB();
-      console.log('MongoDB connected');
-      
-      console.log('Initializing routes...');
-      await registerRoutes(app);
-      routesInitialized = true;
-      console.log('Routes initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize:', error);
-      initError = error as Error;
-      throw error;
-    }
-  }
-})();
-
-// Middleware to ensure routes are initialized
-app.use(async (req, res, next) => {
+app.get('/api/health', async (req, res) => {
   try {
-    await initPromise;
-    if (initError) {
-      throw initError;
-    }
-    next();
+    await ensureInitialized();
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
-    console.error('Initialization error:', error);
-    res.status(500).json({ 
-      message: 'Server initialization failed',
+    res.status(503).json({ 
+      status: 'error', 
+      message: 'Service unavailable',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+// Middleware to ensure initialization before all requests
+app.use(async (req, res, next) => {
+  try {
+    await ensureInitialized();
+    next();
+  } catch (error) {
+    console.error('Initialization error:', error);
+    res.status(503).json({ 
+      message: 'Server initialization in progress or failed',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Initialize database and routes immediately
+let initPromise: Promise<void> | null = null;
+
+async function ensureInitialized() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        console.log('Connecting to MongoDB...');
+        await connectToMongoDB();
+        console.log('MongoDB connected');
+        
+        console.log('Initializing routes...');
+        await registerRoutes(app);
+        console.log('Routes initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize:', error);
+        initPromise = null; // Reset so it can retry
+        throw error;
+      }
+    })();
+  }
+  return initPromise;
+}
+
+// Initialize immediately on module load
+ensureInitialized().catch(err => {
+  console.error('Initial setup failed:', err);
 });
 
 // 404 handler for unmatched routes
