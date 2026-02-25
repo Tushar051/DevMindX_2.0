@@ -47,10 +47,15 @@ export function createMongoIdFilter(userId: string | number | ObjectId): { _id: 
 const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const mongoDbName = process.env.MONGODB_DB || 'devmindx';
 
-let mongoClient: MongoClient;
-let mongoDb: Db;
+let mongoClient: MongoClient | null = null;
+let cachedMongoDb: Db | null = null;
 
-async function connectToMongoDB() {
+async function connectToMongoDB(): Promise<Db> {
+  // Return cached connection if available
+  if (cachedMongoDb) {
+    return cachedMongoDb;
+  }
+
   if (!mongoClient) {
     // Configure TLS based on URI and environment
     const isSrv = mongoUri.startsWith('mongodb+srv://');
@@ -63,10 +68,14 @@ async function connectToMongoDB() {
 
     mongoClient = new MongoClient(mongoUri, mongoOptions);
     await mongoClient.connect();
-    mongoDb = mongoClient.db(mongoDbName);
+    cachedMongoDb = mongoClient.db(mongoDbName);
     console.log('Connected to MongoDB');
   }
-  return mongoDb;
+  
+  return cachedMongoDb!;
 }
 
-export { connectToMongoDB, mongoDb };
+// Export a promise that resolves to the database
+export const mongoDb = connectToMongoDB();
+
+export { connectToMongoDB };

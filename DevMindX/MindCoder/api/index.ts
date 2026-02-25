@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from '../server/routes.js';
+import { connectToMongoDB } from '../server/db.js';
 
 const app = express();
 
@@ -14,7 +15,10 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   
   // CORS - Allow all origins in production for now
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['https://devmindx.vercel.app'];
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    'https://devmindx.vercel.app',
+    'https://devmindx.onrender.com'
+  ];
   const origin = req.headers.origin;
   
   if (origin && allowedOrigins.includes(origin)) {
@@ -55,19 +59,23 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Initialize routes
+// Initialize database and routes
 let routesInitialized = false;
 let initError: Error | null = null;
 
 const initPromise = (async () => {
   if (!routesInitialized) {
     try {
+      console.log('Connecting to MongoDB...');
+      await connectToMongoDB();
+      console.log('MongoDB connected');
+      
       console.log('Initializing routes...');
       await registerRoutes(app);
       routesInitialized = true;
       console.log('Routes initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize routes:', error);
+      console.error('Failed to initialize:', error);
       initError = error as Error;
       throw error;
     }
@@ -83,7 +91,7 @@ app.use(async (req, res, next) => {
     }
     next();
   } catch (error) {
-    console.error('Route initialization error:', error);
+    console.error('Initialization error:', error);
     res.status(500).json({ 
       message: 'Server initialization failed',
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -97,7 +105,17 @@ app.use((req, res) => {
   res.status(404).json({ 
     message: 'Route not found',
     path: req.path,
-    method: req.method
+    method: req.method,
+    availableRoutes: [
+      '/api/health',
+      '/api/auth/*',
+      '/api/projects',
+      '/api/llm/models',
+      '/api/learning/analyze',
+      '/api/architecture/generate',
+      '/api/research/*',
+      '/api/ide/*'
+    ]
   });
 });
 
