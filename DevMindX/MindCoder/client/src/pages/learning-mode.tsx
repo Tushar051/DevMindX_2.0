@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { apiUrl } from '@/config/api';
 import ProjectSelector from '@/components/ProjectSelector';
 
 interface ExplanationSection {
@@ -91,7 +92,7 @@ export default function LearningMode() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/learning/analyze', {
+      const response = await fetch(apiUrl('/api/learning/analyze'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

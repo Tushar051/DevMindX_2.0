@@ -12,6 +12,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { apiUrl } from '@/config/api';
 import ProjectSelector from '@/components/ProjectSelector';
 
 interface DiagramData {
@@ -73,7 +74,7 @@ export default function ArchitectureGenerator() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/architecture/generate', {
+      const response = await fetch(apiUrl('/api/architecture/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

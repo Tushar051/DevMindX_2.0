@@ -34,6 +34,7 @@ import {
   Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiUrl } from '@/config/api';
 import ProjectSelector from '@/components/ProjectSelector';
 
 interface ResearchSection {
@@ -107,7 +108,7 @@ export default function ResearchEngine() {
     setResearchResult(null);
 
     try {
-      const response = await fetch('/api/research/analyze', {
+      const response = await fetch(apiUrl('/api/research/analyze'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { apiUrl } from '@/config/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +42,7 @@ export default function Projects() {
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/projects', {
+      const response = await fetch(apiUrl('/api/projects'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('devmindx_token')}`,
         },
