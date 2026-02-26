@@ -79,6 +79,7 @@ export interface User {
     lastReset: Date;
     [key: string]: number | Date; // Allow for dynamic AI model token usage, and also for lastReset
   } | null;
+  metadata?: any; // For Supabase storage - stores additional user data
 }
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = { 
