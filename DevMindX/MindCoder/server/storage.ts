@@ -257,6 +257,10 @@ class MongoStorage implements IStorage {
   // User operations
   async getUser(id: number | string): Promise<User | undefined> {
     const db = await connectToMongoDB();
+    if (!db) {
+      console.error('MongoDB connection unavailable in getUser');
+      return undefined;
+    }
     const filter = createMongoIdFilter(id);
     const user = await db.collection('users').findOne(filter as any);
     if (!user) return undefined;
@@ -279,6 +283,10 @@ class MongoStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const db = await connectToMongoDB();
+    if (!db) {
+      console.error('MongoDB connection unavailable in getUserByEmail');
+      return undefined;
+    }
     const user = await db.collection('users').findOne({ email } as any);
     if (!user) return undefined;
     return {
