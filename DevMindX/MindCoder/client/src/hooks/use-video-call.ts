@@ -19,6 +19,7 @@ export function useVideoCall(sessionId: string | null) {
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const socketRef = useRef<Socket | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   const ICE_SERVERS = {
     iceServers: [
@@ -105,6 +106,7 @@ export function useVideoCall(sessionId: string | null) {
         audio: audio ? { echoCancellation: true, noiseSuppression: true } : false
       });
       
+      localStreamRef.current = stream;
       setLocalStream(stream);
       setIsVideoEnabled(video);
       setIsAudioEnabled(audio);
@@ -186,8 +188,8 @@ export function useVideoCall(sessionId: string | null) {
 
   // Toggle audio
   const toggleAudio = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsAudioEnabled(audioTrack.enabled);
@@ -201,12 +203,12 @@ export function useVideoCall(sessionId: string | null) {
         }
       }
     }
-  }, [localStream, sessionId]);
+  }, [sessionId]);
 
   // Toggle video
   const toggleVideo = useCallback(() => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoEnabled(videoTrack.enabled);
@@ -220,7 +222,7 @@ export function useVideoCall(sessionId: string | null) {
         }
       }
     }
-  }, [localStream, sessionId]);
+  }, [sessionId]);
 
 
   // Create peer connection for a participant
@@ -343,8 +345,9 @@ export function useVideoCall(sessionId: string | null) {
   // Leave video call
   const leaveCall = useCallback((userId: string, username: string) => {
     // Stop all tracks
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
       setLocalStream(null);
     }
     
@@ -375,7 +378,7 @@ export function useVideoCall(sessionId: string | null) {
     if (socketRef.current && sessionId) {
       socketRef.current.emit('leave-video-call', { sessionId, userId });
     }
-  }, [localStream, screenStream, sessionId, addNote]);
+  }, [screenStream, sessionId, addNote]);
 
   // End meeting (host only)
   const endMeeting = useCallback(() => {
@@ -408,14 +411,23 @@ export function useVideoCall(sessionId: string | null) {
     if (!sessionId) return;
     
     const socket = io(SOCKET_URL, {
-      auth: { token: localStorage.getItem('devmindx_token') }
+      auth: { token: localStorage.getItem('devmindx_token') },
+      transports: ['websocket', 'polling']
     });
     
     socketRef.current = socket;
     
+    socket.on('connect', () => {
+      console.log('Video call socket connected:', socket.id);
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('Video call socket connection error:', error);
+    });
+    
     // Handle new participant joining
     socket.on('participant-joined-call', async (data: { userId: string; username: string; color: string }) => {
-      console.log(`Participant ${data.username} joined call`);
+      console.log(`[VIDEO CALL] Participant ${data.username} (${data.userId}) joined call`);
       
       const participant: Participant = {
         id: data.userId,
@@ -430,15 +442,19 @@ export function useVideoCall(sessionId: string | null) {
       setParticipants(prev => {
         const updated = new Map(prev);
         updated.set(data.userId, participant);
+        console.log(`[VIDEO CALL] Total participants now: ${updated.size}`);
         return updated;
       });
       
-      // Get current local stream
-      const currentStream = localStream;
+      // Use ref to get current stream (not stale state)
+      const currentStream = localStreamRef.current;
       if (!currentStream) {
-        console.error('No local stream available to create peer connection');
+        console.error('[VIDEO CALL] No local stream available to create peer connection');
         return;
       }
+      
+      console.log(`[VIDEO CALL] Creating peer connection for ${data.username}`);
+      console.log(`[VIDEO CALL] Local stream tracks:`, currentStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
       
       // Create peer connection and send offer
       const pc = createPeerConnection(data.userId, data.username, currentStream);
@@ -449,26 +465,30 @@ export function useVideoCall(sessionId: string | null) {
         });
         await pc.setLocalDescription(offer);
         
+        console.log(`[VIDEO CALL] Sending offer to ${data.username}`);
         socket.emit('video-offer', {
           sessionId,
           targetId: data.userId,
           offer
         });
       } catch (error) {
-        console.error('Error creating offer:', error);
+        console.error('[VIDEO CALL] Error creating offer:', error);
       }
     });
     
     // Handle video offer
     socket.on('video-offer', async (data: { senderId: string; senderName: string; offer: RTCSessionDescriptionInit }) => {
-      console.log(`Received video offer from ${data.senderName}`);
+      console.log(`[VIDEO CALL] Received video offer from ${data.senderName} (${data.senderId})`);
       
-      // Get current local stream
-      const currentStream = localStream;
+      // Use ref to get current stream (not stale state)
+      const currentStream = localStreamRef.current;
       if (!currentStream) {
-        console.error('No local stream available to answer offer');
+        console.error('[VIDEO CALL] No local stream available to answer offer');
         return;
       }
+      
+      console.log(`[VIDEO CALL] Creating peer connection to answer ${data.senderName}`);
+      console.log(`[VIDEO CALL] Local stream tracks:`, currentStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
       
       const pc = createPeerConnection(data.senderId, data.senderName, currentStream);
       try {
@@ -476,29 +496,46 @@ export function useVideoCall(sessionId: string | null) {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         
+        console.log(`[VIDEO CALL] Sending answer to ${data.senderName}`);
         socket.emit('video-answer', {
           sessionId,
           targetId: data.senderId,
           answer
         });
       } catch (error) {
-        console.error('Error handling video offer:', error);
+        console.error('[VIDEO CALL] Error handling video offer:', error);
       }
     });
     
     // Handle video answer
     socket.on('video-answer', async (data: { senderId: string; answer: RTCSessionDescriptionInit }) => {
+      console.log(`[VIDEO CALL] Received video answer from ${data.senderId}`);
       const pc = peerConnections.current.get(data.senderId);
       if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log(`[VIDEO CALL] Set remote description for ${data.senderId}`);
+        } catch (error) {
+          console.error('[VIDEO CALL] Error setting remote description:', error);
+        }
+      } else {
+        console.error(`[VIDEO CALL] No peer connection found for ${data.senderId}`);
       }
     });
     
     // Handle ICE candidate
     socket.on('ice-candidate', async (data: { senderId: string; candidate: RTCIceCandidateInit }) => {
+      console.log(`[VIDEO CALL] Received ICE candidate from ${data.senderId}`);
       const pc = peerConnections.current.get(data.senderId);
       if (pc) {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log(`[VIDEO CALL] Added ICE candidate for ${data.senderId}`);
+        } catch (error) {
+          console.error('[VIDEO CALL] Error adding ICE candidate:', error);
+        }
+      } else {
+        console.error(`[VIDEO CALL] No peer connection found for ICE candidate from ${data.senderId}`);
       }
     });
     
