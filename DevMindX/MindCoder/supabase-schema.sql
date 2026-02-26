@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   provider TEXT DEFAULT 'local',
   provider_id TEXT,
+  metadata JSONB DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

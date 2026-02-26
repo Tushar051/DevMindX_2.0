@@ -707,22 +707,40 @@ let storage: IStorage | null = null;
 async function initializeStorage(): Promise<IStorage> {
   if (storage) return storage;
   
-  try {
-    const db = await connectToMongoDB();
-    
-    // Check if db is valid before using it
-    if (db) {
-      await db.command({ ping: 1 }); // Test the connection
-      console.log('MongoDB connection successful, using MongoStorage');
-      storage = new MongoStorage();
-    } else {
-      throw new Error('MongoDB connection returned null');
+  // Try Supabase first (preferred for production)
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+    try {
+      console.log('🔄 Initializing Supabase storage...');
+      const { SupabaseStorage } = await import('./storage-supabase.js');
+      storage = new SupabaseStorage();
+      console.log('✅ Using Supabase storage');
+      return storage;
+    } catch (error) {
+      console.warn('⚠️  Failed to initialize Supabase storage:', error instanceof Error ? error.message : error);
     }
-  } catch (error) {
-    console.warn('Failed to connect to MongoDB, falling back to MemStorage:', error instanceof Error ? error.message : error);
-    storage = new MemStorage();
   }
   
+  // Try MongoDB as fallback
+  if (process.env.MONGODB_URI) {
+    try {
+      console.log('🔄 Attempting MongoDB connection...');
+      const db = await connectToMongoDB();
+      
+      if (db) {
+        await db.command({ ping: 1 });
+        console.log('✅ MongoDB connection successful, using MongoStorage');
+        storage = new MongoStorage();
+        return storage;
+      }
+    } catch (error) {
+      console.warn('⚠️  MongoDB connection failed:', error instanceof Error ? error.message : error);
+    }
+  }
+  
+  // Fall back to MemStorage
+  console.warn('⚠️  No database configured, using MemStorage (data will not persist)');
+  console.warn('💡 Set SUPABASE_URL and SUPABASE_SERVICE_KEY for persistent storage');
+  storage = new MemStorage();
   return storage;
 }
 
