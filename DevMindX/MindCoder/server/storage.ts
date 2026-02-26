@@ -709,11 +709,17 @@ async function initializeStorage(): Promise<IStorage> {
   
   try {
     const db = await connectToMongoDB();
-    await db.command({ ping: 1 }); // Test the connection
-    console.log('MongoDB connection successful, using MongoStorage');
-    storage = new MongoStorage();
+    
+    // Check if db is valid before using it
+    if (db) {
+      await db.command({ ping: 1 }); // Test the connection
+      console.log('MongoDB connection successful, using MongoStorage');
+      storage = new MongoStorage();
+    } else {
+      throw new Error('MongoDB connection returned null');
+    }
   } catch (error) {
-    console.warn('Failed to connect to MongoDB, falling back to MemStorage:', error);
+    console.warn('Failed to connect to MongoDB, falling back to MemStorage:', error instanceof Error ? error.message : error);
     storage = new MemStorage();
   }
   
