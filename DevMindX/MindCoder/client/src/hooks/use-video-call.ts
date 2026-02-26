@@ -191,9 +191,17 @@ export function useVideoCall(sessionId: string | null) {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsAudioEnabled(audioTrack.enabled);
+        
+        // Notify other participants
+        if (socketRef.current && sessionId) {
+          socketRef.current.emit('toggle-audio', {
+            sessionId,
+            isEnabled: audioTrack.enabled
+          });
+        }
       }
     }
-  }, [localStream]);
+  }, [localStream, sessionId]);
 
   // Toggle video
   const toggleVideo = useCallback(() => {
@@ -202,32 +210,65 @@ export function useVideoCall(sessionId: string | null) {
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoEnabled(videoTrack.enabled);
+        
+        // Notify other participants
+        if (socketRef.current && sessionId) {
+          socketRef.current.emit('toggle-video', {
+            sessionId,
+            isEnabled: videoTrack.enabled
+          });
+        }
       }
     }
-  }, [localStream]);
+  }, [localStream, sessionId]);
 
 
   // Create peer connection for a participant
-  const createPeerConnection = useCallback((participantId: string, participantName: string) => {
+  const createPeerConnection = useCallback((participantId: string, participantName: string, stream: MediaStream | null) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     
     // Add local tracks to connection
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        pc.addTrack(track, localStream);
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        console.log(`Adding ${track.kind} track to peer connection for ${participantName}`);
+        pc.addTrack(track, stream);
       });
     }
     
     // Handle incoming tracks
     pc.ontrack = (event) => {
+      console.log(`Received ${event.track.kind} track from ${participantName}`, event.streams[0]);
+      const remoteStream = event.streams[0];
+      
       setParticipants(prev => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
-          updated.set(participantId, { ...participant, stream: event.streams[0] });
+          updated.set(participantId, { ...participant, stream: remoteStream });
+        } else {
+          // Create participant if doesn't exist
+          updated.set(participantId, {
+            id: participantId,
+            username: participantName,
+            color: '#4ECDC4',
+            stream: remoteStream,
+            isAudioEnabled: true,
+            isVideoEnabled: true,
+            isScreenSharing: false,
+            joinedAt: new Date()
+          });
         }
         return updated;
       });
+    };
+    
+    // Handle connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state with ${participantName}: ${pc.connectionState}`);
+    };
+    
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${participantName}: ${pc.iceConnectionState}`);
     };
     
     // Handle ICE candidates
@@ -243,12 +284,16 @@ export function useVideoCall(sessionId: string | null) {
     
     peerConnections.current.set(participantId, pc);
     return pc;
-  }, [localStream, sessionId]);
+  }, [sessionId]);
 
   // Join video call
   const joinCall = useCallback(async (userId: string, username: string, userColor: string) => {
     try {
-      await startLocalStream();
+      const stream = await startLocalStream();
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
       setIsInCall(true);
       
       // Add self to participants
@@ -256,7 +301,7 @@ export function useVideoCall(sessionId: string | null) {
         id: userId,
         username,
         color: userColor,
-        stream: localStream || undefined,
+        stream: stream,
         isAudioEnabled: true,
         isVideoEnabled: true,
         isScreenSharing: false,
@@ -293,7 +338,7 @@ export function useVideoCall(sessionId: string | null) {
       console.error('Error joining call:', error);
       throw error;
     }
-  }, [startLocalStream, localStream, sessionId, addNote]);
+  }, [startLocalStream, sessionId, addNote]);
 
   // Leave video call
   const leaveCall = useCallback((userId: string, username: string) => {
@@ -370,6 +415,8 @@ export function useVideoCall(sessionId: string | null) {
     
     // Handle new participant joining
     socket.on('participant-joined-call', async (data: { userId: string; username: string; color: string }) => {
+      console.log(`Participant ${data.username} joined call`);
+      
       const participant: Participant = {
         id: data.userId,
         username: data.username,
@@ -386,30 +433,57 @@ export function useVideoCall(sessionId: string | null) {
         return updated;
       });
       
-      // Create peer connection and send offer
-      const pc = createPeerConnection(data.userId, data.username);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      // Get current local stream
+      const currentStream = localStream;
+      if (!currentStream) {
+        console.error('No local stream available to create peer connection');
+        return;
+      }
       
-      socket.emit('video-offer', {
-        sessionId,
-        targetId: data.userId,
-        offer
-      });
+      // Create peer connection and send offer
+      const pc = createPeerConnection(data.userId, data.username, currentStream);
+      try {
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
+        await pc.setLocalDescription(offer);
+        
+        socket.emit('video-offer', {
+          sessionId,
+          targetId: data.userId,
+          offer
+        });
+      } catch (error) {
+        console.error('Error creating offer:', error);
+      }
     });
     
     // Handle video offer
     socket.on('video-offer', async (data: { senderId: string; senderName: string; offer: RTCSessionDescriptionInit }) => {
-      const pc = createPeerConnection(data.senderId, data.senderName);
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      console.log(`Received video offer from ${data.senderName}`);
       
-      socket.emit('video-answer', {
-        sessionId,
-        targetId: data.senderId,
-        answer
-      });
+      // Get current local stream
+      const currentStream = localStream;
+      if (!currentStream) {
+        console.error('No local stream available to answer offer');
+        return;
+      }
+      
+      const pc = createPeerConnection(data.senderId, data.senderName, currentStream);
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        
+        socket.emit('video-answer', {
+          sessionId,
+          targetId: data.senderId,
+          answer
+        });
+      } catch (error) {
+        console.error('Error handling video offer:', error);
+      }
     });
     
     // Handle video answer
@@ -439,6 +513,30 @@ export function useVideoCall(sessionId: string | null) {
       setParticipants(prev => {
         const updated = new Map(prev);
         updated.delete(data.userId);
+        return updated;
+      });
+    });
+    
+    // Handle audio toggle
+    socket.on('participant-audio-toggled', (data: { userId: string; isEnabled: boolean }) => {
+      setParticipants(prev => {
+        const updated = new Map(prev);
+        const participant = updated.get(data.userId);
+        if (participant) {
+          updated.set(data.userId, { ...participant, isAudioEnabled: data.isEnabled });
+        }
+        return updated;
+      });
+    });
+    
+    // Handle video toggle
+    socket.on('participant-video-toggled', (data: { userId: string; isEnabled: boolean }) => {
+      setParticipants(prev => {
+        const updated = new Map(prev);
+        const participant = updated.get(data.userId);
+        if (participant) {
+          updated.set(data.userId, { ...participant, isVideoEnabled: data.isEnabled });
+        }
         return updated;
       });
     });

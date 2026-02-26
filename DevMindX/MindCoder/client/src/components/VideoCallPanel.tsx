@@ -117,8 +117,15 @@ export function VideoCallPanel({
     participants.forEach((participant, id) => {
       if (participant.stream && id !== currentUserId) {
         const videoEl = remoteVideoRefs.current.get(id);
-        if (videoEl && videoEl.srcObject !== participant.stream) {
-          videoEl.srcObject = participant.stream;
+        if (videoEl) {
+          if (videoEl.srcObject !== participant.stream) {
+            console.log(`Attaching stream for ${participant.username}`);
+            videoEl.srcObject = participant.stream;
+            // Ensure autoplay with audio
+            videoEl.play().catch(err => {
+              console.log('Autoplay prevented, user interaction may be required:', err);
+            });
+          }
         }
       }
     });
@@ -287,7 +294,16 @@ export function VideoCallPanel({
               .map(participant => (
                 <div key={participant.id} className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video min-h-[120px]">
                   <video
-                    ref={(el) => { if (el) remoteVideoRefs.current.set(participant.id, el); }}
+                    ref={(el) => { 
+                      if (el) {
+                        remoteVideoRefs.current.set(participant.id, el);
+                        // Ensure video plays with audio
+                        if (participant.stream && el.srcObject !== participant.stream) {
+                          el.srcObject = participant.stream;
+                          el.play().catch(err => console.log('Video play error:', err));
+                        }
+                      }
+                    }}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"

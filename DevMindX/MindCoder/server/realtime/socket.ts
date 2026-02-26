@@ -407,6 +407,22 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
       });
     });
 
+    // Toggle audio
+    socket.on('toggle-audio', (data: { sessionId: string; isEnabled: boolean }) => {
+      socket.to(data.sessionId).emit('participant-audio-toggled', {
+        userId: socket.data.user.id,
+        isEnabled: data.isEnabled
+      });
+    });
+
+    // Toggle video
+    socket.on('toggle-video', (data: { sessionId: string; isEnabled: boolean }) => {
+      socket.to(data.sessionId).emit('participant-video-toggled', {
+        userId: socket.data.user.id,
+        isEnabled: data.isEnabled
+      });
+    });
+
     // End meeting (host only)
     socket.on('end-meeting', (data: { sessionId: string }) => {
       const session = sessions.get(data.sessionId);
