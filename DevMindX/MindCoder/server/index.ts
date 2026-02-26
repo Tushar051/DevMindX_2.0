@@ -96,21 +96,8 @@ app.use((req, res, next) => {
 // Connect to MongoDB at server startup and initialize collections
 import { ensureChatHistoryCollection } from './models/chatHistory.js';
 
-// Connect to MongoDB and initialize collections
 (async () => {
-  try {
-    const db = await connectToMongoDB();
-    // Initialize collections with proper schemas
-    if (db) {
-      await ensureChatHistoryCollection(db);
-      console.log('MongoDB collections initialized');
-    }
-  } catch (err: any) {
-    console.error('Failed to connect to MongoDB:', err);
-  }
-})();
-
-(async () => {
+  // Start server first, then connect to MongoDB
   await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -126,7 +113,7 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
 
   const port = parseInt(process.env.PORT || '5000', 10);
   
-  // Start the HTTP server first
+  // Start the HTTP server first - CRITICAL for Render to detect the service is up
   httpServer.listen(port, '0.0.0.0', () => {
     log(`serving on port ${port}`);
   });
@@ -134,6 +121,20 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
   // Attach Socket.IO realtime collaboration (single instance)
   const io = setupSocketIO(httpServer);
   console.log('Socket.IO collaboration server initialized');
+
+  // Connect to MongoDB after server is running (non-blocking)
+  // This prevents server crash if MongoDB connection fails
+  connectToMongoDB()
+    .then(async (db) => {
+      if (db) {
+        await ensureChatHistoryCollection(db);
+        console.log('✅ MongoDB collections initialized');
+      }
+    })
+    .catch((err: any) => {
+      console.error('⚠️  MongoDB connection failed, but server is still running:', err.message);
+      console.error('Some features requiring MongoDB will not be available.');
+    });
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

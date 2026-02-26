@@ -64,11 +64,9 @@ async function connectToMongoDB(): Promise<Db> {
   if (!mongoClient) {
     try {
       // Configure connection options for MongoDB Atlas
-      // Fix for Node.js v22 SSL/TLS compatibility with Render
+      // Compatible with MongoDB Node.js Driver v6+
       const mongoOptions: any = {
         tls: true,
-        tlsAllowInvalidCertificates: false,
-        tlsAllowInvalidHostnames: false,
         serverSelectionTimeoutMS: 30000, // Increased timeout for Render cold starts
         connectTimeoutMS: 30000,
         socketTimeoutMS: 45000,
@@ -76,14 +74,7 @@ async function connectToMongoDB(): Promise<Db> {
         minPoolSize: 1, // Reduced for free tier
         retryWrites: true,
         retryReads: true,
-        w: 'majority',
-        // Add these options for Node.js v22 compatibility
-        ssl: true,
-        sslValidate: true,
-        directConnection: false,
-        // Disable legacy SSL options that cause issues in Node.js v22
-        useNewUrlParser: true,
-        useUnifiedTopology: true
+        w: 'majority'
       };
 
       mongoClient = new MongoClient(mongoUri, mongoOptions);
