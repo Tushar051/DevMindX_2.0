@@ -53,6 +53,7 @@ let cachedMongoDb: Db | null = null;
 async function connectToMongoDB(): Promise<Db> {
   // Check if MongoDB URI is configured
   if (!mongoUri) {
+    console.warn('⚠️  MONGODB_URI environment variable is not set. MongoDB features will be unavailable.');
     throw new Error('MONGODB_URI environment variable is not set. Please configure MongoDB connection.');
   }
 
@@ -85,14 +86,20 @@ async function connectToMongoDB(): Promise<Db> {
       console.error('❌ Failed to connect to MongoDB:', error);
       mongoClient = null;
       cachedMongoDb = null;
-      throw new Error(`MongoDB connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Don't throw - let the caller handle the error
+      // This prevents server crash during startup
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`MongoDB connection failed: ${errorMessage}`);
+      console.error('Server will continue with fallback storage (MemStorage)');
+      
+      throw error; // Still throw so caller knows it failed
     }
   }
   
   return cachedMongoDb!;
 }
 
-// Export a promise that resolves to the database
-export const mongoDb = connectToMongoDB();
-
+// Don't export a promise - it causes immediate execution
+// Use connectToMongoDB() function instead
 export { connectToMongoDB };

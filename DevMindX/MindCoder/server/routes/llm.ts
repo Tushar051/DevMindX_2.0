@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { mongoDb, createMongoIdFilter } from '../db.js';
+import { connectToMongoDB, createMongoIdFilter } from '../db.js';
 import { AIModelId, PurchasedModel } from '../../shared/types.js';
 
 const router = Router();
@@ -58,7 +58,7 @@ router.get('/models', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const db = await mongoDb;
+    const db = await connectToMongoDB();
     const usersCollection = db.collection('users');
     
     const user = await usersCollection.findOne(createMongoIdFilter(userId) as any);
@@ -148,7 +148,7 @@ router.post('/models/purchase', async (req, res) => {
       return res.status(400).json({ error: 'Cannot purchase free model' });
     }
 
-    const db = await mongoDb;
+    const db = await connectToMongoDB();
     const usersCollection = db.collection('users');
 
     const purchasedModel: PurchasedModel = {
@@ -207,7 +207,7 @@ router.post('/usage/track', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request' });
     }
 
-    const db = await mongoDb;
+    const db = await connectToMongoDB();
     const usersCollection = db.collection('users');
 
     // Update usage
@@ -254,7 +254,7 @@ router.get('/models/:modelId/check', async (req, res) => {
       return res.json({ canUse: true, reason: 'free' });
     }
 
-    const db = await mongoDb;
+    const db = await connectToMongoDB();
     const usersCollection = db.collection('users');
     const user = await usersCollection.findOne(createMongoIdFilter(userId) as any);
 
@@ -307,7 +307,7 @@ router.post('/usage/reset', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const db = await mongoDb;
+    const db = await connectToMongoDB();
     const usersCollection = db.collection('users');
 
     // Reset all users' monthly token usage
