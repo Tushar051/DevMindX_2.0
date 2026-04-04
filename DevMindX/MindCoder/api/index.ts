@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import passport from "passport";
 import { registerRoutes } from '../server/routes.js';
 import { connectToMongoDB } from '../server/db.js';
+import { registerPassportStrategies } from '../server/auth/passport-setup.js';
+
+registerPassportStrategies();
 
 const app = express();
 
@@ -43,6 +47,7 @@ app.use((req, res, next) => {
 // Request body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(passport.initialize());
 
 // Request logging
 app.use((req, res, next) => {
@@ -68,21 +73,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Middleware to ensure initialization before all requests
-app.use(async (req, res, next) => {
-  try {
-    await ensureInitialized();
-    next();
-  } catch (error) {
-    console.error('Initialization error:', error);
-    res.status(503).json({ 
-      message: 'Server initialization in progress or failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Initialize database and routes immediately
+// MongoDB only — must not register Express routes here; see comment below.
 let initPromise: Promise<void> | null = null;
 
 async function ensureInitialized() {
@@ -92,13 +83,9 @@ async function ensureInitialized() {
         console.log('Connecting to MongoDB...');
         await connectToMongoDB();
         console.log('MongoDB connected');
-        
-        console.log('Initializing routes...');
-        await registerRoutes(app);
-        console.log('Routes initialized successfully');
       } catch (error) {
-        console.error('Failed to initialize:', error);
-        initPromise = null; // Reset so it can retry
+        console.error('Failed to connect MongoDB:', error);
+        initPromise = null;
         throw error;
       }
     })();
@@ -106,8 +93,30 @@ async function ensureInitialized() {
   return initPromise;
 }
 
-// Initialize immediately on module load
-ensureInitialized().catch(err => {
+// Middleware to ensure DB is ready before API handlers run
+app.use(async (req, res, next) => {
+  try {
+    await ensureInitialized();
+    next();
+  } catch (error) {
+    console.error('Initialization error:', error);
+    res.status(503).json({
+      message: 'Server initialization in progress or failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * Register API routes once, before the 404 handler.
+ * Previously registerRoutes() ran inside ensureInitialized() after this 404 middleware
+ * was already mounted, so new routes were appended *after* the catch-all and never ran
+ * (every /api/auth/* request returned 404).
+ */
+registerRoutes(app);
+
+// Warm MongoDB on cold start
+ensureInitialized().catch((err) => {
   console.error('Initial setup failed:', err);
 });
 

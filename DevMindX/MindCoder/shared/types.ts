@@ -138,7 +138,7 @@ export interface CollaborationMessage {
   type: 'chat' | 'system' | 'file-change' | 'user-join' | 'user-leave';
 }
 
-export interface FileChange {
+export interface CollaborationFileChange {
   id: string;
   sessionId: string;
   userId: string;

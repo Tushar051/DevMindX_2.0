@@ -4,6 +4,15 @@ import { generateProjectWithChatGPT, generateCodeWithChatGPT, chatWithChatGPT, a
 import { generateProjectWithClaude, generateCodeWithClaude, chatWithClaude, analyzeCodeWithClaude } from './claude.js';
 import { generateProjectWithDeepSeek, generateCodeWithDeepSeek, chatWithDeepSeek, analyzeCodeWithDeepSeek } from './deepseek.js';
 
+// Import Ollama service (local LLM)
+import { 
+  generateProjectWithOllama, 
+  generateCodeWithOllama, 
+  chatWithOllama, 
+  analyzeCodeWithOllama,
+  checkOllamaAvailability 
+} from './ollama.js';
+
 // Import shared types
 import { AIModelId, AIResponse, ProjectGenerationRequest, CodeGenerationRequest, ChatRequest, AIModel, PurchasedModel, FileChange } from '../../shared/types.js';
 
@@ -20,6 +29,20 @@ export async function generateProjectWithAI(request: ProjectGenerationRequest): 
       throw new Error('Prompt is required for project generation');
     }
 
+    // Check if Ollama is available
+    const useOllama = process.env.USE_OLLAMA === 'true' || await checkOllamaAvailability();
+    
+    if (useOllama) {
+      console.log(`Routing ${model} to Ollama for project generation`);
+      try {
+        return await generateProjectWithOllama(prompt, framework, name, model);
+      } catch (ollamaError) {
+        console.warn('Ollama failed, falling back to Gemini:', ollamaError);
+        return await generateProjectWithGemini(prompt, framework, name);
+      }
+    }
+
+    // Fallback to original external LLM logic
     switch (model) {
       case 'together': {
         try {
@@ -62,36 +85,54 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
     let content: string;
     let fileChanges: FileChange[] = []; // Initialize fileChanges array
 
-    switch (model) {
-      case 'together': {
-        try {
-          const { generateCodeWithTogether } = await import('./together.js');
-          const togetherResult = await generateCodeWithTogether(instruction, context);
-          content = togetherResult.content;
-          fileChanges = togetherResult.fileChanges || [];
-        } catch (e) {
-          console.warn('Together AI not available, falling back to Gemini for code generation.');
-          const geminiResult = await generateCodeWithGemini(instruction, context);
-          content = geminiResult.content;
-          fileChanges = geminiResult.fileChanges || [];
-        }
-        break;
-      }
-      case 'gemini':
+    // Check if Ollama is available
+    const useOllama = process.env.USE_OLLAMA === 'true' || await checkOllamaAvailability();
+    
+    if (useOllama) {
+      console.log(`Routing ${model} to Ollama for code generation`);
+      try {
+        const ollamaResult = await generateCodeWithOllama(instruction, context, model);
+        content = ollamaResult.content;
+        fileChanges = ollamaResult.fileChanges || [];
+      } catch (ollamaError) {
+        console.warn('Ollama failed, falling back to Gemini:', ollamaError);
         const geminiResult = await generateCodeWithGemini(instruction, context);
         content = geminiResult.content;
         fileChanges = geminiResult.fileChanges || [];
-        break;
-      case 'chatgpt':
-      case 'claude':
-      case 'deepseek':
-        // Route these providers to Gemini under the hood
-        const routedGeminiResult = await generateCodeWithGemini(instruction, context);
-        content = routedGeminiResult.content;
-        fileChanges = routedGeminiResult.fileChanges || [];
-        break;
-      default:
-        throw new Error(`Unsupported AI model: ${model}`);
+      }
+    } else {
+      // Fallback to original external LLM logic
+      switch (model) {
+        case 'together': {
+          try {
+            const { generateCodeWithTogether } = await import('./together.js');
+            const togetherResult = await generateCodeWithTogether(instruction, context);
+            content = togetherResult.content;
+            fileChanges = togetherResult.fileChanges || [];
+          } catch (e) {
+            console.warn('Together AI not available, falling back to Gemini for code generation.');
+            const geminiResult = await generateCodeWithGemini(instruction, context);
+            content = geminiResult.content;
+            fileChanges = geminiResult.fileChanges || [];
+          }
+          break;
+        }
+        case 'gemini':
+          const geminiResult = await generateCodeWithGemini(instruction, context);
+          content = geminiResult.content;
+          fileChanges = geminiResult.fileChanges || [];
+          break;
+        case 'chatgpt':
+        case 'claude':
+        case 'deepseek':
+          // Route these providers to Gemini under the hood
+          const routedGeminiResult = await generateCodeWithGemini(instruction, context);
+          content = routedGeminiResult.content;
+          fileChanges = routedGeminiResult.fileChanges || [];
+          break;
+        default:
+          throw new Error(`Unsupported AI model: ${model}`);
+      }
     }
 
     return {
@@ -104,6 +145,31 @@ export async function generateCodeWithAI(request: CodeGenerationRequest): Promis
     console.error('Error in generateCodeWithAI:', error);
     throw error;
   }
+}
+
+/** Append project file bodies so local models (Ollama) see real code, not only paths. */
+function appendProjectFilesToPrompt(base: string, files: unknown): string {
+  if (!files || typeof files !== "object" || Array.isArray(files)) return base;
+  const record = files as Record<string, string>;
+  const paths = Object.keys(record);
+  if (paths.length === 0) return base;
+
+  const maxPerFile = 14_000;
+  const maxTotal = 90_000;
+  let block = "";
+  for (const path of paths) {
+    let body = String(record[path] ?? "");
+    if (body.length > maxPerFile) {
+      body = `${body.slice(0, maxPerFile)}\n... [truncated]\n`;
+    }
+    const piece = `\n\n--- ${path} ---\n${body}`;
+    if (block.length + piece.length > maxTotal) {
+      block += "\n\n... [additional files omitted for length]\n";
+      break;
+    }
+    block += piece;
+  }
+  return `${base}\n\n--- Project files (${paths.length}) ---${block}`;
 }
 
 export async function chatWithAIModel(request: ChatRequest): Promise<AIResponse> {
@@ -141,36 +207,63 @@ export async function chatWithAIModel(request: ChatRequest): Promise<AIResponse>
       fullMessage = `The user has provided the following request: "${message}".\n\nAdditionally, there are current diagnostics (errors/warnings) in the project that might need attention:\n${diagnosticsString}\n\nPlease address these in your response and provide any necessary file changes.`;
     }
 
-    switch (model) {
-      case 'together': {
-        try {
-          const { chatWithTogether } = await import('./together.js');
-          const togetherChatResult = await chatWithTogether(fullMessage, chatHistory, projectContext);
-          content = togetherChatResult.content;
-          fileChanges = togetherChatResult.fileChanges || [];
-        } catch (e) {
-          console.warn('Together AI not available, falling back to Gemini for chat.');
-          const geminiChatResult = await chatWithGemini(fullMessage, chatHistory, projectContext, image);
-          content = geminiChatResult.content;
-          fileChanges = geminiChatResult.fileChanges || [];
-        }
-        break;
-      }
-      case 'gemini':
+    if (
+      projectContext &&
+      projectContext.files &&
+      typeof projectContext.files === "object" &&
+      !Array.isArray(projectContext.files)
+    ) {
+      fullMessage = appendProjectFilesToPrompt(fullMessage, projectContext.files);
+    }
+
+    // Check if Ollama is available
+    const useOllama = process.env.USE_OLLAMA === 'true' || await checkOllamaAvailability();
+    
+    if (useOllama) {
+      console.log(`Routing ${model} to Ollama for chat`);
+      try {
+        const ollamaChatResult = await chatWithOllama(fullMessage, chatHistory, projectContext, model);
+        content = ollamaChatResult.content;
+        fileChanges = ollamaChatResult.fileChanges || [];
+      } catch (ollamaError) {
+        console.warn('Ollama failed, falling back to Gemini:', ollamaError);
         const geminiChatResult = await chatWithGemini(fullMessage, chatHistory, projectContext, image);
         content = geminiChatResult.content;
         fileChanges = geminiChatResult.fileChanges || [];
-        break;
-      case 'chatgpt':
-      case 'claude':
-      case 'deepseek':
-        // Route these providers to Gemini under the hood
-        const routedGeminiChat = await chatWithGemini(fullMessage, chatHistory, projectContext);
-        content = routedGeminiChat.content;
-        fileChanges = routedGeminiChat.fileChanges || [];
-        break;
-      default:
-        throw new Error(`Unsupported AI model: ${model}`);
+      }
+    } else {
+      // Fallback to original external LLM logic
+      switch (model) {
+        case 'together': {
+          try {
+            const { chatWithTogether } = await import('./together.js');
+            const togetherChatResult = await chatWithTogether(fullMessage, chatHistory, projectContext);
+            content = togetherChatResult.content;
+            fileChanges = togetherChatResult.fileChanges || [];
+          } catch (e) {
+            console.warn('Together AI not available, falling back to Gemini for chat.');
+            const geminiChatResult = await chatWithGemini(fullMessage, chatHistory, projectContext, image);
+            content = geminiChatResult.content;
+            fileChanges = geminiChatResult.fileChanges || [];
+          }
+          break;
+        }
+        case 'gemini':
+          const geminiChatResult = await chatWithGemini(fullMessage, chatHistory, projectContext, image);
+          content = geminiChatResult.content;
+          fileChanges = geminiChatResult.fileChanges || [];
+          break;
+        case 'chatgpt':
+        case 'claude':
+        case 'deepseek':
+          // Route these providers to Gemini under the hood
+          const routedGeminiChat = await chatWithGemini(fullMessage, chatHistory, projectContext);
+          content = routedGeminiChat.content;
+          fileChanges = routedGeminiChat.fileChanges || [];
+          break;
+        default:
+          throw new Error(`Unsupported AI model: ${model}`);
+      }
     }
 
     console.log('Chat response generated:', { content: content.substring(0, 100) + '...' });
@@ -202,28 +295,42 @@ export async function analyzeCodeWithAI(code: string, task: string, model: AIMod
 
     let content: string;
 
-    switch (model) {
-      case 'together': {
-        try {
-          const { analyzeCodeWithTogether } = await import('./together.js');
-          content = await analyzeCodeWithTogether(code, task);
-        } catch (e) {
-          console.warn('Together AI not available, falling back to Gemini for analysis.');
-          content = await analyzeCodeWithGemini(code, task);
-        }
-        break;
+    // Check if Ollama is available
+    const useOllama = process.env.USE_OLLAMA === 'true' || await checkOllamaAvailability();
+    
+    if (useOllama) {
+      console.log(`Routing ${model} to Ollama for code analysis`);
+      try {
+        content = await analyzeCodeWithOllama(code, task, model);
+      } catch (ollamaError) {
+        console.warn('Ollama failed, falling back to Gemini:', ollamaError);
+        content = await analyzeCodeWithGemini(code, task);
       }
-      case 'gemini':
-        content = await analyzeCodeWithGemini(code, task);
-        break;
-      case 'chatgpt':
-      case 'claude':
-      case 'deepseek':
-        // Route these providers to Gemini under the hood
-        content = await analyzeCodeWithGemini(code, task);
-        break;
-      default:
-        throw new Error(`Unsupported AI model: ${model}`);
+    } else {
+      // Fallback to original external LLM logic
+      switch (model) {
+        case 'together': {
+          try {
+            const { analyzeCodeWithTogether } = await import('./together.js');
+            content = await analyzeCodeWithTogether(code, task);
+          } catch (e) {
+            console.warn('Together AI not available, falling back to Gemini for analysis.');
+            content = await analyzeCodeWithGemini(code, task);
+          }
+          break;
+        }
+        case 'gemini':
+          content = await analyzeCodeWithGemini(code, task);
+          break;
+        case 'chatgpt':
+        case 'claude':
+        case 'deepseek':
+          // Route these providers to Gemini under the hood
+          content = await analyzeCodeWithGemini(code, task);
+          break;
+        default:
+          throw new Error(`Unsupported AI model: ${model}`);
+      }
     }
 
     return {
@@ -252,22 +359,26 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
     if (userId) {
       try {
         const db = await connectToMongoDB();
-        let user = null;
-        if (typeof userId === 'string' && /^[0-9a-fA-F]{24}$/.test(userId) || typeof userId === 'number') { // Allow number type IDs
-          user = await db.collection('users').findOne({ _id: createMongoIdFilter(userId) });
-          console.log('User found in getAvailableModels:', user);
-        }
-        
-        if (user && user.purchasedModels && Array.isArray(user.purchasedModels)) {
-          console.log('Raw user.purchasedModels:', user.purchasedModels);
-          // Filter out expired models and add active ones to userPurchasedModels
-          userPurchasedRecords = user.purchasedModels.filter((p: PurchasedModel) => {
-            const purchaseDate = new Date(p.purchaseDate);
-            const expirationDate = new Date(purchaseDate.setMonth(purchaseDate.getMonth() + p.months));
-            return new Date() < expirationDate; // Check if still active
-          });
-          console.log('Filtered userPurchasedRecords (active subscriptions):', userPurchasedRecords);
-          userPurchasedModels = [...new Set([...userPurchasedModels, ...userPurchasedRecords.map((p: PurchasedModel) => p.id)])];
+        if (!db) {
+          console.error('Database connection failed in getAvailableModels');
+        } else {
+          let user = null;
+          if (typeof userId === 'string' && /^[0-9a-fA-F]{24}$/.test(userId) || typeof userId === 'number') { // Allow number type IDs
+            user = await db.collection('users').findOne({ _id: createMongoIdFilter(userId) });
+            console.log('User found in getAvailableModels:', user);
+          }
+          
+          if (user && user.purchasedModels && Array.isArray(user.purchasedModels)) {
+            console.log('Raw user.purchasedModels:', user.purchasedModels);
+            // Filter out expired models and add active ones to userPurchasedModels
+            userPurchasedRecords = user.purchasedModels.filter((p: PurchasedModel) => {
+              const purchaseDate = new Date(p.purchaseDate);
+              const expirationDate = new Date(purchaseDate.setMonth(purchaseDate.getMonth() + p.months));
+              return new Date() < expirationDate; // Check if still active
+            });
+            console.log('Filtered userPurchasedRecords (active subscriptions):', userPurchasedRecords);
+            userPurchasedModels = [...new Set([...userPurchasedModels, ...userPurchasedRecords.map((p: PurchasedModel) => p.id)])];
+          }
         }
       } catch (dbError) {
         console.error('Error fetching user purchased models:', dbError);
@@ -392,6 +503,10 @@ export async function getAvailableModels(userId?: string): Promise<AIModel[]> { 
 async function updateTokenUsage(userId: string, modelId: string, tokensUsed: number): Promise<void> {
   try {
     const db = await connectToMongoDB();
+    if (!db) {
+      console.error('Database connection failed in updateTokenUsage');
+      return;
+    }
     if (typeof userId === 'string' && /^[0-9a-fA-F]{24}$/.test(userId)) {
       await db.collection('users').updateOne(
         { _id: new ObjectId(userId) },

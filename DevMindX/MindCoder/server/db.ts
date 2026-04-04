@@ -50,11 +50,11 @@ const mongoDbName = process.env.MONGODB_DB || 'devmindx';
 let mongoClient: MongoClient | null = null;
 let cachedMongoDb: Db | null = null;
 
-async function connectToMongoDB(): Promise<Db> {
+async function connectToMongoDB(): Promise<Db | null> {
   // Check if MongoDB URI is configured
   if (!mongoUri) {
     console.warn('⚠️  MONGODB_URI environment variable is not set. MongoDB features will be unavailable.');
-    throw new Error('MONGODB_URI environment variable is not set. Please configure MongoDB connection.');
+    return null;
   }
 
   // Return cached connection if available
@@ -87,19 +87,18 @@ async function connectToMongoDB(): Promise<Db> {
       mongoClient = null;
       cachedMongoDb = null;
       
-      // Don't throw - let the caller handle the error
-      // This prevents server crash during startup
+      // Don't throw - return null to let caller handle gracefully
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`MongoDB connection failed: ${errorMessage}`);
       console.error('Server will continue with fallback storage (MemStorage)');
       
-      throw error; // Still throw so caller knows it failed
+      return null;
     }
   }
   
-  return cachedMongoDb!;
+  return cachedMongoDb;
 }
-
-// Don't export a promise - it causes immediate execution
-// Use connectToMongoDB() function instead
+// Export the connection function
+// Returns Db | null - null if connection fails or not configured
 export { connectToMongoDB };
+export type { Db };

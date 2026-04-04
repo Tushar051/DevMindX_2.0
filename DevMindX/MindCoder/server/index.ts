@@ -1,10 +1,14 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import passport from "passport";
 import { createServer } from 'http';
+import { registerPassportStrategies } from "./auth/passport-setup.js";
 import { registerRoutes } from './routes.js';
 import { setupVite, serveStatic, log } from "./vite.js";
 import { setupSocketIO } from "./realtime/socket.js";
 import { connectToMongoDB } from './db.js';
+
+registerPassportStrategies();
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -19,6 +23,7 @@ app.use((req, res, next) => {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
     'https://devmindx.vercel.app',
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:5000'
   ];
   const origin = req.headers.origin;
@@ -52,6 +57,7 @@ app.use((req, res, next) => {
 // Request body parsing with limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(passport.initialize());
 
 // Compression for production
 if (isProduction) {
@@ -136,11 +142,14 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
       console.error('Some features requiring MongoDB will not be available.');
     });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Dev: either embed Vite (single port 5000) or API-only when the UI runs from ../front (DEV_API_ONLY + Vite on 5173).
+  const devApiOnly =
+    process.env.DEV_API_ONLY === "1" || process.env.DEV_API_ONLY === "true";
+
   if (app.get("env") === "development") {
-    await setupVite(app, httpServer);
+    if (!devApiOnly) {
+      await setupVite(app, httpServer);
+    }
   } else {
     serveStatic(app);
   }

@@ -1,7 +1,12 @@
 // Note: This is a simulated implementation for ChatGPT integration
 
-import { FileChange } from "@shared/types.js";
 import JSON5 from 'json5';
+
+export interface FileChange {
+  path: string;
+  content: string;
+  type: 'create' | 'update' | 'delete';
+}
 
 if (!process.env.CHATGPT_API_KEY) {
   console.warn('CHATGPT_API_KEY is not set. ChatGPT features will use simulated responses.');
@@ -15,11 +20,12 @@ const simulateResponse = (prompt: string) => {
   return `[FAKE CHATGPT] This is a simulated response for your prompt: "${prompt}"`;
 };
 
-const SYSTEM_PROMPT = {
-  role: 'system',
-  content:
-    'You are a concise programming assistant. Respond briefly. Avoid examples or code unless explicitly asked. Do not repeat the question. If you are given diagnostic information (errors, warnings), prioritize addressing them by providing an updated file content. When suggesting code changes, provide a JSON object with a \'fileChanges\' array, where each object in the array has \'filePath\', \'action\' (create, update, or delete), and \'newContent\' (if action is create or update). If no specific file changes are needed, or if the response is purely conversational, return a simple text response. When providing file changes, ensure the content is complete and syntactically correct, including all necessary imports and surrounding code context.',
-};
+// Unused for now - kept for future real implementation
+// const SYSTEM_PROMPT = {
+//   role: 'system',
+//   content:
+//     'You are a concise programming assistant. Respond briefly. Avoid examples or code unless explicitly asked. Do not repeat the question. If you are given diagnostic information (errors, warnings), prioritize addressing them by providing an updated file content. When suggesting code changes, provide a JSON object with a \'fileChanges\' array, where each object in the array has \'path\', \'type\' (create, update, or delete), and \'content\' (if type is create or update). If no specific file changes are needed, or if the response is purely conversational, return a simple text response. When providing file changes, ensure the content is complete and syntactically correct, including all necessary imports and surrounding code context.',
+// };
 
 // --- 1. Generate Full Project Code ---
 export async function generateProjectWithChatGPT(prompt: string, framework?: string, name?: string): Promise<any> {
@@ -63,7 +69,7 @@ export async function generateCodeWithChatGPT(instruction: string, context?: str
     // For demonstration, we'll simulate the AI's response to include file changes.
     const simulatedContent = `// Simulated code change based on instruction: ${instruction}\nconsole.log("File updated by ChatGPT");`;
     const simulatedFileChanges: FileChange[] = [
-      { filePath: "src/temp/chatgpt_generated_file.js", action: "create", newContent: simulatedContent }
+      { path: "src/temp/chatgpt_generated_file.js", type: "create", content: simulatedContent }
     ];
 
     // In a real scenario, this would involve calling the ChatGPT API and parsing its response for structured changes.
@@ -110,7 +116,7 @@ export async function chatWithChatGPT(message: string, chatHistory?: any[], proj
     // For demonstration, we'll simulate the AI's response to include file changes.
     const simulatedContent = `// Simulated chat response: ${message}\n// File change suggested by ChatGPT\n// Path: src/temp/chatgpt_chat_file.js\n// Action: update\n// Content: console.log("Hello from ChatGPT chat!");`;
     const simulatedFileChanges: FileChange[] = [
-      { filePath: "src/temp/chatgpt_chat_file.js", action: "update", newContent: "console.log(\"Hello from ChatGPT chat!\");" }
+      { path: "src/temp/chatgpt_chat_file.js", type: "update", content: "console.log(\"Hello from ChatGPT chat!\");" }
     ];
 
     const jsonResponse = JSON.stringify({

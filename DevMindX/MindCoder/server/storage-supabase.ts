@@ -5,20 +5,34 @@ import type { User, InsertUser, Project, InsertProject, ChatSession, InsertChatS
 export class SupabaseStorage implements IStorage {
   // User operations
   async getUser(id: number | string): Promise<User | undefined> {
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      if (error.code !== 'PGRST116') { // Not found is ok
-        console.error('Error fetching user:', error);
-      }
-      return undefined;
+    const attempts: (string | number)[] = [id];
+    if (typeof id === 'string') {
+      const n = Number(id);
+      if (!Number.isNaN(n) && Number.isFinite(n)) attempts.push(n);
+    } else {
+      attempts.push(String(id));
     }
 
-    return this.mapSupabaseUserToUser(data);
+    const tried = new Set<string>();
+    for (const attempt of attempts) {
+      const key = `${typeof attempt}:${attempt}`;
+      if (tried.has(key)) continue;
+      tried.add(key);
+
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', attempt)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user:', error);
+        continue;
+      }
+      if (data) return this.mapSupabaseUserToUser(data);
+    }
+
+    return undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {

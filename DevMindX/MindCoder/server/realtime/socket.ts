@@ -24,6 +24,8 @@ interface CollaborationSession {
   hostId: string;
   users: Map<string, CollaborationUser>;
   files: Map<string, string>;
+  /** Latest collaborative whiteboard payload (JSON string) */
+  whiteboardData: string;
   createdAt: Date;
   lastActivity: Date;
 }
@@ -92,6 +94,7 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
             hostId: socket.data.user.id,
             users: new Map(),
             files: new Map(),
+            whiteboardData: '',
             createdAt: new Date(),
             lastActivity: new Date()
           };
@@ -119,7 +122,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         socket.emit('session-state', {
           sessionId: session.id,
           users: Array.from(session.users.values()),
-          files: Object.fromEntries(session.files)
+          files: Object.fromEntries(session.files),
+          whiteboardData: session.whiteboardData || ''
         });
 
         // Notify others that a new user joined
@@ -287,12 +291,17 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
       });
     });
 
-    // Whiteboard updates
+    // Whiteboard — persist on session so late joiners get latest sketch
     socket.on('whiteboard-update', (data: { data: string }) => {
       const sessionId = socket.data.sessionId;
       if (!sessionId) return;
 
-      // Broadcast whiteboard drawing to all other users
+      const session = sessions.get(sessionId);
+      if (session && typeof data.data === 'string') {
+        session.whiteboardData = data.data;
+        session.lastActivity = new Date();
+      }
+
       socket.to(sessionId).emit('whiteboard-update', {
         userId: socket.data.user.id,
         username: socket.data.user.username,

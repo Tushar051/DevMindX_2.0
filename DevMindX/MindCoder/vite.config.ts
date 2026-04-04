@@ -1,61 +1,55 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+import tailwindcss from "tailwindcss";
+
+/** Used only when Express embeds Vite (npm run dev:server without DEV_API_ONLY). Prefer `front/` + DEV_API_ONLY. */
+const mindCoderRoot = path.dirname(fileURLToPath(import.meta.url));
+const frontRoot = path.resolve(mindCoderRoot, "../front");
 
 export default defineConfig(({ mode }) => ({
   server: {
     proxy: {
-      '/api': 'http://localhost:5000',
-      '/socket.io': {
-        target: 'http://localhost:5000',
+      "/api": "http://localhost:5000",
+      "/socket.io": {
+        target: "http://localhost:5000",
         ws: true,
       },
     },
   },
 
+  root: frontRoot,
   plugins: [react()],
-  root: "./client",
   resolve: {
     alias: {
-      "@": path.resolve("./client/src"),
+      "@": path.join(frontRoot, "src"),
     },
   },
   build: {
-    outDir: "../dist/public",
-    // Production optimizations
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: mode === 'production',
-        drop_debugger: mode === 'production',
-      },
-    },
+    outDir: path.join(mindCoderRoot, "dist/public"),
+    emptyOutDir: true,
+    minify: mode === "production" ? "esbuild" : false,
     rollupOptions: {
       output: {
-        // Code splitting for better caching
         manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-tabs', '@radix-ui/react-tooltip'],
-          'vendor-motion': ['framer-motion'],
-          'vendor-editor': ['monaco-editor', '@monaco-editor/react'],
-          'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
+          "vendor-react": ["react", "react-dom"],
+          "vendor-editor": ["monaco-editor", "@monaco-editor/react"],
         },
       },
     },
-    // Chunk size warnings
     chunkSizeWarningLimit: 1000,
-    // Source maps for production debugging (optional)
-    sourcemap: mode !== 'production',
+    sourcemap: mode !== "production",
   },
-  // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'framer-motion', 'lucide-react'],
+    include: ["react", "react-dom", "lucide-react", "@monaco-editor/react", "monaco-editor"],
   },
-  // CSS optimizations
   css: {
+    postcss: {
+      plugins: [tailwindcss()],
+    },
     devSourcemap: true,
   },
-  // Preview server config
   preview: {
     port: 4173,
     strictPort: true,

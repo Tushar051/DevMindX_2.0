@@ -165,15 +165,16 @@ Customize the Monaco Editor:
 ## 🏗️ Architecture
 
 ### Frontend Structure
+The SPA lives in `../front/` (sibling to `MindCoder/`). Login, signup, marketing, and app routes are under `front/src/`.
 ```
-client/src/
-├── components/          # Reusable UI components
-├── pages/              # Page components
-│   ├── ide.tsx        # Main IDE component
-│   └── landing.tsx    # Landing page
-├── hooks/              # Custom React hooks
-├── lib/                # Utility functions
-└── styles/             # Global styles
+front/src/
+├── components/
+├── pages/
+│   ├── auth/           # Login, signup
+│   ├── Features/
+│   └── app/            # Generator, IDE, etc.
+├── layouts/
+└── context/
 ```
 
 ### Backend Structure
