@@ -15,7 +15,12 @@ export default defineConfig({
         /** Prefer 5173; if another Vite/IDE instance holds it, use the next free port. */
         strictPort: false,
         proxy: {
-            "/api": { target: "http://localhost:5000", changeOrigin: true },
+            "/api": { 
+                target: "http://localhost:5000", 
+                changeOrigin: true,
+                timeout: 120000, // 2 minutes
+                proxyTimeout: 120000
+            },
             "/socket.io": { target: "http://localhost:5000", ws: true },
         },
     },

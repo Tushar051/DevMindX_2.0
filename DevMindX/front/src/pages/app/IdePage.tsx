@@ -334,6 +334,10 @@ export function IdePage() {
   const [terminalHeight, setTerminalHeight] = useState(200);
   const termDragRef = useRef<{ y: number; h: number } | null>(null);
 
+  const [chatWidth, setChatWidth] = useState(320);
+  const chatDragRef = useRef<{ x: number; w: number } | null>(null);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+
   const onWhiteboardRemote = useCallback((json: string) => {
     setWhiteboardSnap(!json || json.length === 0 ? EMPTY_WHITEBOARD : json);
   }, []);
@@ -1060,9 +1064,38 @@ export function IdePage() {
           </div>
         </div>
 
+        <div
+          className="hidden lg:block w-1.5 shrink-0 cursor-col-resize border-x border-transparent bg-[#3c3c3c] hover:bg-[#569cd6]/80"
+          role="separator"
+          aria-label="Resize chatbox"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            // Store starting X and starting width
+            chatDragRef.current = { x: e.clientX, w: chatWidth };
+            const move = (ev: MouseEvent) => {
+              if (!chatDragRef.current) return;
+              // dx is how much the mouse has moved left
+              const dx = chatDragRef.current.x - ev.clientX;
+              const next = Math.min(
+                Math.max(chatDragRef.current.w + dx, 250), // min width
+                window.innerWidth * 0.8 // max width
+              );
+              setChatWidth(next);
+            };
+            const up = () => {
+              chatDragRef.current = null;
+              window.removeEventListener("mousemove", move);
+              window.removeEventListener("mouseup", up);
+            };
+            window.addEventListener("mousemove", move);
+            window.addEventListener("mouseup", up);
+          }}
+        />
+
+        {/* Use inline style for variable width, and media queries via CSS to apply 100% on small screens */}
         <aside
-          className="flex w-full shrink-0 flex-col border-t lg:w-80 lg:border-l lg:border-t-0"
-          style={{ backgroundColor: chrome.sidebar, borderColor: chrome.border }}
+          className="flex w-full shrink-0 flex-col border-t lg:border-t-0"
+          style={{ width: chatWidth, maxWidth: "100%", backgroundColor: chrome.sidebar, borderColor: chrome.border }}
         >
           <div
             className="flex h-9 items-center justify-between border-b px-2 text-[11px] font-bold tracking-wide"
@@ -1074,57 +1107,73 @@ export function IdePage() {
             </span>
             <Sparkles className="h-3.5 w-3.5 text-violet-400" />
           </div>
-          <div className="border-b p-2 space-y-2" style={{ borderColor: chrome.border }}>
-            <p id="ide-model-heading" className="text-[10px] font-medium uppercase tracking-wide text-[#666]">
+          <div className="relative border-b p-2" style={{ borderColor: chrome.border }}>
+            <p id="ide-model-heading" className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[#666]">
               AI model
             </p>
-            <div
-              role="listbox"
-              aria-labelledby="ide-model-heading"
-              className="max-h-[220px] space-y-1.5 overflow-y-auto pr-0.5"
+            <button
+              onClick={() => setModelMenuOpen(!modelMenuOpen)}
+              className="flex w-full items-center justify-between rounded border bg-[#1e1e1e] px-2 py-1.5 text-[12px] text-[#e0e0e0] hover:border-violet-500/60"
+              style={{ borderColor: chrome.border }}
             >
-              {modelRows.map((m) => (
+              <span className="truncate">{modelRows.find((m) => m.id === model)?.label || "Select Model..."}</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#888]" />
+            </button>
+
+            {modelMenuOpen && (
+              <>
+                {/* Backdrop to close dropdown when clicking outside */}
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setModelMenuOpen(false)}
+                />
                 <div
-                  key={m.id}
-                  role="option"
-                  aria-selected={model === m.id}
-                  className={`rounded-lg border px-2 py-1.5 ${
-                    model === m.id ? "border-violet-500/50 bg-violet-500/10" : "border-[#404040] bg-[#2a2a2a]"
-                  }`}
+                  className="absolute left-2 right-2 top-[54px] z-50 rounded-lg border bg-[#1e1e1e] p-1 shadow-2xl"
+                  style={{ borderColor: chrome.border }}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium text-[#e0e0e0]">{m.label}</span>
-                    {m.unlocked ? (
-                      <button
-                        type="button"
-                        onClick={() => setModel(m.id)}
-                        className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${
-                          model === m.id ? "bg-violet-600 text-white" : "bg-white/10 text-[#ccc] hover:bg-white/15"
+                  <div role="listbox" aria-labelledby="ide-model-heading" className="max-h-[220px] overflow-y-auto">
+                    {modelRows.map((m) => (
+                      <div
+                        key={m.id}
+                        role="option"
+                        aria-selected={model === m.id}
+                        className={`mb-0.5 rounded px-2 py-1.5 ${
+                          model === m.id ? "bg-violet-500/20 text-violet-200" : "hover:bg-white/5"
                         }`}
                       >
-                        {model === m.id ? "Active" : "Use"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPurchaseTarget({ id: m.id, label: m.label, priceInr: m.priceInr });
-                          setPurchaseOpen(true);
-                        }}
-                        className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200 hover:bg-amber-500/20"
-                      >
-                        <Lock className="h-3 w-3" aria-hidden />
-                        ₹{m.priceInr}
-                      </button>
-                    )}
+                        <div className="flex items-center justify-between gap-2 text-[12px] text-[#e0e0e0]">
+                          <button
+                            type="button"
+                            className="flex-1 text-left font-medium"
+                            onClick={() => {
+                              if (m.unlocked) {
+                                setModel(m.id);
+                                setModelMenuOpen(false);
+                              } else {
+                                setPurchaseTarget({ id: m.id, label: m.label, priceInr: m.priceInr });
+                                setPurchaseOpen(true);
+                                setModelMenuOpen(false);
+                              }
+                            }}
+                          >
+                            {m.label}
+                          </button>
+                          {!m.unlocked && (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                              <Lock className="h-3 w-3" />
+                              ₹{m.priceInr}
+                            </span>
+                          )}
+                        </div>
+                        {m.free && <p className="mt-0.5 text-[9px] text-emerald-400/90">Included · default</p>}
+                      </div>
+                    ))}
                   </div>
-                  {m.free && (
-                    <p className="mt-0.5 text-[9px] text-emerald-400/90">Included · default</p>
-                  )}
                 </div>
-              ))}
-            </div>
-            {ollamaHint && <p className="text-[10px] leading-snug text-[#6b7280]">{ollamaHint}</p>}
+              </>
+            )}
+
+            {ollamaHint && <p className="mt-2 text-[10px] leading-snug text-[#6b7280]">{ollamaHint}</p>}
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
             {aiMessages.length === 0 && (
