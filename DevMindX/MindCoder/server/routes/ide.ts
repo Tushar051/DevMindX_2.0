@@ -185,6 +185,56 @@ router.post("/ai/chat", async (req, res) => {
   }
 });
 
+// Get AI Chat history for the user (last 30 days)
+router.get("/ai/history", async (req, res) => {
+  try {
+    const authUser = await getUserFromRequest(req);
+    if (!authUser) return res.status(401).json({ error: "Unauthorized" });
+    
+    const storage = await getStorage();
+    const sessions = await storage.getUserChatSessions(authUser.id);
+    
+    // Filter for last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentSessions = sessions
+      .filter(s => !s.createdAt || new Date(s.createdAt) >= thirtyDaysAgo)
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+      
+    res.json(recentSessions);
+  } catch (error: unknown) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Save or Update AI Chat history
+router.post("/ai/history", async (req, res) => {
+  try {
+    const authUser = await getUserFromRequest(req);
+    if (!authUser) return res.status(401).json({ error: "Unauthorized" });
+    
+    const { id, projectId, messages } = req.body;
+    const storage = await getStorage();
+
+    if (id) {
+      // Update existing chat
+      const updated = await storage.updateChatSession(id, { messages: messages || [] });
+      return res.json(updated);
+    } else {
+      // Create new chat session
+      const created = await storage.createChatSession({
+        userId: authUser.id,
+        projectId: projectId || "ide-scratch",
+        messages: messages || []
+      });
+      return res.json(created);
+    }
+  } catch (error: unknown) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // File system operations
 router.post('/files/create', async (req, res) => {
   try {

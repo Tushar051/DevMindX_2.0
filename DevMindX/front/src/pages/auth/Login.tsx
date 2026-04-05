@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Loader2, Github } from "lucide-react";
+import { Loader2, Github, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 export function LoginPage() {
@@ -11,6 +11,7 @@ export function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
@@ -68,7 +69,7 @@ export function LoginPage() {
   };
 
   const oauth = (provider: "google" | "github") => {
-    const base = import.meta.env.VITE_API_URL ?? "";
+    const base = (import.meta as any).env.VITE_API_URL ?? "";
     window.location.href = `${base}/api/auth/${provider}`;
   };
 
@@ -101,13 +102,22 @@ export function LoginPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1.5">Password</label>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 

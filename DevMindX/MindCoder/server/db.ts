@@ -66,8 +66,9 @@ async function connectToMongoDB(): Promise<Db | null> {
     try {
       // Configure connection options for MongoDB Atlas
       // Compatible with MongoDB Node.js Driver v6+
+      const isLocalhost = mongoUri.includes('localhost') || mongoUri.includes('127.0.0.1');
+      const isSrv = mongoUri.startsWith('mongodb+srv://');
       const mongoOptions: any = {
-        tls: true,
         serverSelectionTimeoutMS: 30000, // Increased timeout for Render cold starts
         connectTimeoutMS: 30000,
         socketTimeoutMS: 45000,
@@ -77,6 +78,10 @@ async function connectToMongoDB(): Promise<Db | null> {
         retryReads: true,
         w: 'majority'
       };
+      
+      if (isSrv || (!isLocalhost && process.env.NODE_ENV === 'production')) {
+         mongoOptions.tls = true;
+      }
 
       mongoClient = new MongoClient(mongoUri, mongoOptions);
       await mongoClient.connect();

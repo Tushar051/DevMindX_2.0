@@ -26,6 +26,7 @@ interface CollaborationSession {
   files: Map<string, string>;
   /** Latest collaborative whiteboard payload (JSON string) */
   whiteboardData: string;
+  notes: string;
   createdAt: Date;
   lastActivity: Date;
 }
@@ -95,6 +96,7 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
             users: new Map(),
             files: new Map(),
             whiteboardData: '',
+            notes: '',
             createdAt: new Date(),
             lastActivity: new Date()
           };
@@ -121,9 +123,11 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         // Send current session state to the joining user
         socket.emit('session-state', {
           sessionId: session.id,
+          hostId: session.hostId,
           users: Array.from(session.users.values()),
           files: Object.fromEntries(session.files),
-          whiteboardData: session.whiteboardData || ''
+          whiteboardData: session.whiteboardData || '',
+          notes: session.notes || ''
         });
 
         // Notify others that a new user joined
@@ -307,6 +311,48 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
         username: socket.data.user.username,
         data: data.data
       });
+    });
+
+    // Meet Notes
+    socket.on('note-update', (data: { notes: string }) => {
+      const sessionId = socket.data.sessionId;
+      if (!sessionId) return;
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.notes = data.notes;
+        session.lastActivity = new Date();
+      }
+      socket.to(sessionId).emit('note-update', {
+        userId: socket.data.user.id,
+        notes: data.notes
+      });
+    });
+
+    // End session (Host only)
+    socket.on('end-session', () => {
+      const sessionId = socket.data.sessionId;
+      if (!sessionId) return;
+      const session = sessions.get(sessionId);
+      if (!session) return;
+      
+      // Verify host privileges
+      if (session.hostId !== socket.data.user.id.toString()) return;
+      
+      // Broadcast session end
+      io.to(sessionId).emit('session-ended');
+      
+      // Remove everyone from the session
+      Array.from(session.users.values()).forEach((user) => {
+         const client = io.sockets.sockets.get(user.id); // Note: socketio socket IDs are mapped differently, we track user connections differently. Wait, session.users keys are socket.ids!
+      });
+      for (const socketId of session.users.keys()) {
+         const client = io.sockets.sockets.get(socketId);
+         if (client) {
+            client.leave(sessionId);
+            client.data.sessionId = undefined;
+         }
+      }
+      sessions.delete(sessionId);
     });
 
     // User typing indicator

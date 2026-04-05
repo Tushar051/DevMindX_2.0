@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FolderOpen, Trash2, Download, Loader2, Search } from "lucide-react";
+import { FolderOpen, Trash2, Download, Loader2, Search, ExternalLink } from "lucide-react";
 import { apiUrl, authHeaders } from "@/lib/api";
 import { motion } from "framer-motion";
 
@@ -149,6 +149,14 @@ export function ProjectsPage() {
                 >
                   <FolderOpen className="w-3.5 h-3.5" />
                   Open in IDE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/app/ide?projectId=${p.id}&tab=preview`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 shadow-sm"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Instant Preview
                 </button>
                 <Link
                   to={`/app/learning?projectId=${encodeURIComponent(p.id)}`}

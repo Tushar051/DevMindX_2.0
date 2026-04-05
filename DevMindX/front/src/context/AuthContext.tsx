@@ -25,8 +25,21 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const storedUser = localStorage.getItem("devmindx_user");
+    if (storedUser) {
+      try {
+        return JSON.parse(storedUser) as User;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem("devmindx_token");
+  });
 
   const login = useCallback((newToken: string, newUser: User) => {
     setToken(newToken);
@@ -43,29 +56,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("devmindx_token");
-    const storedUser = localStorage.getItem("devmindx_user");
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser) as User);
-      } catch {
-        localStorage.removeItem("devmindx_token");
-        localStorage.removeItem("devmindx_user");
-      }
+    // Perform initial token verification but don't block the first render
+    if (token) {
+      fetch("/api/projects", { headers: { Authorization: `Bearer ${token}` } }).then(
+        (res) => {
+          if (res.status === 401) logout();
+        },
+        () => {
+          // If fetch fails (network error), don't necessarily log out
+        },
+      );
     }
-  }, []);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("devmindx_token");
-    if (!stored) return;
-    fetch("/api/projects", { headers: { Authorization: `Bearer ${stored}` } }).then(
-      (res) => {
-        if (res.status === 401) logout();
-      },
-      () => {},
-    );
-  }, [logout]);
+  }, [token, logout]);
 
   const value = useMemo(
     () => ({

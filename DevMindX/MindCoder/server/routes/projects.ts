@@ -6,6 +6,7 @@ import { getStorage } from "../storage.js";
 import { generateProjectWithAI } from "../services/aiService.js";
 import type { AIModelId } from "../../shared/types.js";
 import type { InsertProject } from "@shared/schema.js";
+import codeSandboxService from "../services/codesandbox.js";
 
 const router = Router();
 router.use(requireUser);
@@ -44,11 +45,12 @@ router.get("/", async (req, res) => {
 /** Generate with Ollama (when available) / AI pipeline, then persist. */
 router.post("/generate", async (req, res) => {
   try {
-    const { name, framework, description, model } = req.body as {
+    const { name, framework, description, model, withPreview } = req.body as {
       name?: string;
       framework?: string;
       description?: string;
       model?: string;
+      withPreview?: boolean;
     };
     if (!description || typeof description !== "string" || !description.trim()) {
       return res.status(400).json({ message: "description is required" });
@@ -66,6 +68,31 @@ router.post("/generate", async (req, res) => {
         ? (result.files as Record<string, string>)
         : {};
 
+    let previewUrl: string | null = null;
+    let sandboxId: string | null = null;
+
+    if (withPreview) {
+      try {
+        let template: "react" | "vue" | "angular" | "node" | "static" | "vanilla" = "vanilla";
+        const detected = codeSandboxService.detectTemplate(files);
+        if (["react", "vue", "angular", "node", "static", "vanilla"].includes(detected)) {
+          template = detected as any;
+        }
+
+        const sandboxData = await codeSandboxService.createSandbox({
+          files,
+          template,
+          title: (typeof name === "string" && name.trim()) || result.name || "AI Generated Project",
+          description: description.trim(),
+        });
+        
+        previewUrl = sandboxData.previewUrl;
+        sandboxId = sandboxData.sandboxId;
+      } catch (err) {
+        console.error("CodeSandbox creation error:", err);
+      }
+    }
+
     const storage = await getStorage();
     const fw = String(
       (typeof framework === "string" && framework.trim()) || result.framework || "vanilla",
@@ -82,7 +109,7 @@ router.post("/generate", async (req, res) => {
       message: "Project generated and saved",
       files,
       projectId: project.id,
-      preview: { previewUrl: null as string | null, sandboxId: null as string | null },
+      preview: { previewUrl, sandboxId },
     });
   } catch (e) {
     console.error("POST /projects/generate:", e);

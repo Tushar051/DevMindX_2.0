@@ -18,7 +18,7 @@ type Options = {
 };
 
 function socketOrigin(): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
+  const base = ((import.meta as any).env?.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
   return base || window.location.origin;
 }
 
@@ -38,8 +38,9 @@ export function useIdeCollaboration({
   whiteboardCbRef.current = onWhiteboardData;
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState<CollabUser[]>([]);
+  const [hostId, setHostId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<number>();
 
   useEffect(() => {
     if (!enabled || !sessionId) {
@@ -72,8 +73,9 @@ export function useIdeCollaboration({
 
     socket.on(
       "session-state",
-      (data: { users?: CollabUser[]; files?: Record<string, string>; whiteboardData?: string }) => {
+      (data: { users?: CollabUser[]; files?: Record<string, string>; whiteboardData?: string; hostId?: string }) => {
         if (data.users) setUsers(data.users);
+        if (data.hostId !== undefined) setHostId(data.hostId);
         if (data.files && Object.keys(data.files).length > 0) {
           setFiles((prev) => ({ ...prev, ...data.files }));
         }
@@ -125,6 +127,11 @@ export function useIdeCollaboration({
       },
     );
 
+    socket.on("session-ended", () => {
+      window.alert("The admin has ended this meet.");
+      window.location.href = window.location.pathname; // strip URL params and naturally reload
+    });
+
     if (socket.connected) onConnect();
 
     return () => {
@@ -168,6 +175,7 @@ export function useIdeCollaboration({
   return {
     connected,
     users,
+    hostId,
     panelOpen,
     setPanelOpen,
     scheduleCodeSync,

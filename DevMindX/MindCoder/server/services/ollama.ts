@@ -167,14 +167,20 @@ export async function generateProjectWithOllama(
   try {
     const projectName = name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'generated-project';
     
-    const systemPrompt = `You are an expert full-stack developer. Generate a complete, production-ready project based on the user's requirements.
+    const systemPrompt = `You are an elite Senior Full-Stack Architect. Your goal is to generate a comprehensive, professional, and visually stunning project.
     
-IMPORTANT: Structure your response as follows:
-1. Brief project description
-2. File structure
-3. Code for each file in this format:
-\`\`\`filename
-// code here
+IMPORTANT RULES:
+1. NEVER generate a single file. Always split logic into index.html, style.css, and script.js (and others as needed).
+2. Use modern, premium DESIGN. Use Tailwind CSS via CDN in the HTML.
+3. Every project MUST have:
+   - A modern responsive layout.
+   - Interactive elements with animations.
+   - Professional typography and color palettes.
+4. For games, include full game loops and collision logic.
+5. Format EVERY file block as:
+\`\`\`language
+// filename.ext
+code contents
 \`\`\`
 
 Framework: ${framework || 'vanilla JavaScript'}
