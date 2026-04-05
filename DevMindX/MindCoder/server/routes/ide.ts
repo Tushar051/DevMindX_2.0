@@ -344,36 +344,17 @@ router.post("/models/purchase", async (req, res) => {
       });
     }
 
-    const { modelId, months, paymentMethod, paymentDetails } = req.body as {
+    const { modelId, months, paymentMethod, paymentDetails, razorpayPaymentId, razorpayOrderId } = req.body as {
       modelId?: string;
       months?: number;
       paymentMethod?: string;
-      paymentDetails?: unknown;
+      paymentDetails?: any;
+      razorpayPaymentId?: string;
+      razorpayOrderId?: string;
     };
 
-    if (!modelId || !paymentMethod) {
-      return res.status(400).json({ error: "Missing modelId or paymentMethod" });
-    }
-    if (!["credit", "debit", "upi"].includes(paymentMethod)) {
-      return res.status(400).json({ error: "Invalid paymentMethod — use credit, debit, or upi" });
-    }
-
-    const pd = paymentDetails && typeof paymentDetails === "object" ? (paymentDetails as Record<string, unknown>) : {};
-    if (paymentMethod === "upi") {
-      const upiId = String(pd.upiId ?? "").trim();
-      // Typical UPI: local@provider — allow sensible demo shapes (no spaces).
-      if (!/^[^\s@]+@[^\s@]+$/.test(upiId) || upiId.length < 5) {
-        return res.status(400).json({
-          error: "Use a valid UPI format, e.g. you@paytm or name@oksbi (no spaces)",
-        });
-      }
-    } else {
-      const last4 = String(pd.cardLast4 ?? "").replace(/\D/g, "");
-      if (last4.length !== 4) {
-        return res.status(400).json({
-          error: "Enter exactly 4 digits for the card last-four (e.g. 4242)",
-        });
-      }
+    if (!modelId) {
+      return res.status(400).json({ error: "Missing modelId" });
     }
 
     const catalog = IDE_CHAT_MODELS.find((m) => m.id === modelId);
@@ -384,11 +365,17 @@ router.post("/models/purchase", async (req, res) => {
       return res.status(400).json({ error: "Together AI is already included" });
     }
 
+    const pd = paymentDetails && typeof paymentDetails === "object" ? (paymentDetails as Record<string, unknown>) : {};
+    
     const purchasedModel: PurchasedModel = {
       id: catalog.id,
       purchaseDate: new Date().toISOString(),
-      paymentMethod: paymentMethod as PurchasedModel["paymentMethod"],
-      paymentDetails: pd as PurchasedModel["paymentDetails"],
+      paymentMethod: (paymentMethod || "razorpay") as any,
+      paymentDetails: {
+        ...pd,
+        razorpayPaymentId,
+        razorpayOrderId
+      } as any,
       months: typeof months === "number" && months > 0 ? months : 1,
     };
 
@@ -405,7 +392,7 @@ router.post("/models/purchase", async (req, res) => {
 
     res.json({
       success: true,
-      message: `Unlocked ${catalog.label} for ${purchasedModel.months} month(s) (demo checkout)`,
+      message: `Unlocked ${catalog.label} for ${purchasedModel.months} month(s).`,
       modelId: catalog.id,
     });
   } catch (error: unknown) {
