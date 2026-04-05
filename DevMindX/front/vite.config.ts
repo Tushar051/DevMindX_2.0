@@ -27,7 +27,7 @@ export default defineConfig({
     publicDir: "./static",
     base: "./",
     build: {
-        outDir: path.join(mindCoderRoot, "dist/public"),
+        outDir: process.env.VERCEL ? "dist" : path.join(mindCoderRoot, "dist/public"),
         emptyOutDir: true,
     },
     css: {
