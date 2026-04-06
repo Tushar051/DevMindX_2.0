@@ -1,29 +1,29 @@
 import { TeamCard } from "@/sections/TeamSection/components/TeamCard";
+import tusharImg from "@/assets/team/tushar.png";
+import nutanImg from "@/assets/team/nutan.png";
+import aayushImg from "@/assets/team/aayush.png";
+import samarthImg from "@/assets/team/samarth.png";
 
 const team = [
     {
         name: "Tushar Kedar",
-        role: "Wordpress Developer",
-        imageSrc: "https://c.animaapp.com/mnjysuh44mDhUR/assets/69d02000b4b1be95e3c63344_creative_img_1.webp",
+        imageSrc: tusharImg,
         imageAlt: "creative-img-1",
         imageSizes: "(max-width: 600px) 100vw, 600px",
     },
     {
         name: "Nutan Satpute",
-        role: "Social Media Specialist",
-        imageSrc: "https://c.animaapp.com/mnjysuh44mDhUR/assets/69d02000b4b1be95e3c632f9_profile2.png",
+        imageSrc: nutanImg,
         imageAlt: "creative-img-2",
     },
     {
         name: "Aayush Jadhav",
-        role: "Product Designer",
-        imageSrc: "https://c.animaapp.com/mnjysuh44mDhUR/assets/69d02000b4b1be95e3c632f8_profile3.png",
+        imageSrc: aayushImg,
         imageAlt: "creative-img-3",
     },
     {
         name: "Samarth Uttampalle",
-        role: "UI Designer",
-        imageSrc: "https://c.animaapp.com/mnjysuh44mDhUR/assets/69d02000b4b1be95e3c63347_creative_img_4.webp",
+        imageSrc: samarthImg,
         imageAlt: "creative-img-4",
         imageSizes: "(max-width: 600px) 100vw, 600px",
     },

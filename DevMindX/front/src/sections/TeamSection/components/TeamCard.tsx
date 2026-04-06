@@ -1,6 +1,6 @@
 export type TeamCardProps = {
     name: string;
-    role: string;
+    role?: string;
     imageSrc: string;
     imageAlt: string;
     imageSizes?: string;
@@ -22,9 +22,11 @@ export const TeamCard = (props: TeamCardProps) => {
                 <p className="text-zinc-900 text-[22px] font-medium box-border leading-[26.4px] text-center transition-colors duration-200 group-hover:text-indigo-600 md:text-2xl md:leading-[28.8px]">
                     {props.name}
                 </p>
-                <div className="text-zinc-900/60 box-border leading-[16.8px] text-center">
-                    {props.role}
-                </div>
+                {props.role && (
+                    <div className="text-zinc-900/60 box-border leading-[16.8px] text-center">
+                        {props.role}
+                    </div>
+                )}
             </div>
         </div>
     );
