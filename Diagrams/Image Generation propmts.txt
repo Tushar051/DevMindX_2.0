@@ -1,0 +1,17 @@
+1. System Architecture
+enerates parent/child nodes using a top-to-bottom Directed Acyclic Graph (DAG) layout.
+
+2. Class Diagram
+Maps classes as nodes and relationships (Inheritance, Composition, Aggregation) as edges.
+
+3. ER Diagram
+"A user table with an id and email. An order table with an id and total. A user can have many orders."
+
+4. Sequence Diagram
+"Alice sends a request to Bob. Bob checks his database and replies to Alice with an 'ok' message."
+
+5. REST API Blueprint
+"A user profile API. Include a GET route to fetch a user by ID, and a POST route to update user details."
+
+6. Data Flow
+Displays database tables/entities as nodes and relationships (one-to-many, many-to-many) as edges

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, LayoutTemplate } from "lucide-react";
 import { apiUrl, authHeaders } from "@/lib/api";
 import { motion } from "framer-motion";
+import { SmartDiagram } from "@/components/SmartDiagram";
 
 type DiagramId = "system" | "class" | "er" | "sequence" | "api" | "dataflow";
 
@@ -28,12 +29,12 @@ function fieldForTab(tab: DiagramId): keyof DiagramData {
 }
 
 interface DiagramData {
-  systemArchitecture: string;
-  classDiagram: string;
-  erDiagram: string;
-  sequenceDiagram: string;
-  restApiBlueprint: string;
-  dataFlowDiagram: string;
+  systemArchitecture: any;
+  classDiagram: any;
+  erDiagram: any;
+  sequenceDiagram: any;
+  restApiBlueprint: any;
+  dataFlowDiagram: any;
   description?: string;
 }
 
@@ -111,7 +112,7 @@ export function ArchitecturePage() {
     }
   };
 
-  const currentText = data ? String(data[fieldForTab(activeTab)] ?? "") : "";
+  const currentData = data ? data[fieldForTab(activeTab)] : null;
 
   return (
     <div className="space-y-6 relative min-h-screen">
@@ -200,10 +201,29 @@ export function ArchitecturePage() {
               </button>
             ))}
           </div>
-          <div className="p-4 max-h-[480px] overflow-auto">
-            <pre className="text-xs font-mono text-zinc-800 whitespace-pre-wrap break-words">
-              {currentText || "(empty)"}
-            </pre>
+          <div className="p-4 bg-zinc-50 border-t border-zinc-100">
+            {currentData ? (
+              activeTab === "api" && (typeof currentData === "string" || currentData?.mermaid) ? (
+                <div className="p-4 bg-white rounded-lg border border-zinc-200">
+                  <h4 className="text-sm font-semibold text-zinc-800 mb-2">API Blueprint</h4>
+                  <pre className="text-sm font-mono text-zinc-800 whitespace-pre-wrap break-words">
+                    {typeof currentData === "string" ? currentData : currentData.mermaid}
+                  </pre>
+                  {currentData.reactFlow && currentData.reactFlow.nodes?.length > 0 && (
+                     <div className="mt-4">
+                        <h4 className="text-sm font-semibold text-zinc-800 mb-2">API Nodes Flow</h4>
+                        <SmartDiagram data={currentData} />
+                     </div>
+                  )}
+                </div>
+              ) : (
+                <SmartDiagram data={currentData} />
+              )
+            ) : (
+              <pre className="text-xs font-mono text-zinc-800 whitespace-pre-wrap break-words">
+                (empty)
+              </pre>
+            )}
           </div>
         </div>
       )}

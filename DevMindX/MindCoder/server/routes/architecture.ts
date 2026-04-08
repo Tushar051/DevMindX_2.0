@@ -6,12 +6,12 @@ const router = Router();
 router.use(requireUser);
 
 const EMPTY = {
-  systemArchitecture: "",
-  classDiagram: "",
-  erDiagram: "",
-  sequenceDiagram: "",
-  restApiBlueprint: "",
-  dataFlowDiagram: "",
+  systemArchitecture: null as any,
+  classDiagram: null as any,
+  erDiagram: null as any,
+  sequenceDiagram: null as any,
+  restApiBlueprint: null as any,
+  dataFlowDiagram: null as any,
 };
 
 const FIELD_FOR_TYPE: Record<string, keyof typeof EMPTY> = {
@@ -33,55 +33,86 @@ router.post("/generate", async (req, res) => {
     const field = FIELD_FOR_TYPE[type];
 
     const instructions: Record<string, string> = {
-      system:
-        "Produce a Mermaid `graph TB` or `C4Context`-style system architecture diagram text for the described system.",
-      class: "Produce a Mermaid `classDiagram` for the main entities and relationships.",
-      er: "Produce a Mermaid `erDiagram` for core entities.",
-      sequence: "Produce one Mermaid `sequenceDiagram` for a primary user flow.",
-      api: "Produce a concise REST API blueprint (Markdown tables or OpenAPI-style YAML in a code block).",
-      dataflow: "Produce a Mermaid `flowchart LR` data-flow diagram.",
+      system: "Create a system architecture diagram. For mermaid use 'flowchart TB' syntax.",
+      class: "Create a class diagram. For mermaid use 'classDiagram' syntax.",
+      er: "Create an Entity-Relationship diagram. For mermaid use 'erDiagram' syntax.",
+      sequence: "Create a sequence diagram. For reactFlow, map actors and actions as nodes and messages as edges. For mermaid use 'sequenceDiagram' syntax.",
+      api: "Create a REST API blueprint. For reactFlow, map endpoints/resources as nodes. For mermaid use 'flowchart LR' or describe appropriately.",
+      dataflow: "Create a data-flow map. For mermaid use 'flowchart LR' syntax.",
     };
 
-    const prompt = `You are a software architect. ${instructions[type]}
+    const prompt = `You are an expert system architect mapping out software diagrams.
+
+Task: ${instructions[type]}
 
 User description:
 ${description.trim()}
 
-Respond with ONLY valid JSON (no markdown fences) in this exact shape:
-{
-  "systemArchitecture": "string (mermaid or text, empty string if not this diagram)",
-  "classDiagram": "string",
-  "erDiagram": "string",
-  "sequenceDiagram": "string",
-  "restApiBlueprint": "string",
-  "dataFlowDiagram": "string",
-  "description": "short summary of what you modeled"
-}
+CRITICAL RULES:
+1. You MUST provide exactly two markdown code blocks: one \`\`\`json block and one \`\`\`mermaid block.
+2. The \`\`\`json block MUST contain the React Flow data with exactly "nodes" and "edges" arrays. Nodes must have "id" and "data": {"label": "..."}. Edges must have "id", "source", "target".
+3. The \`\`\`mermaid block MUST contain the raw Mermaid syntax string.
+4. Do not wrap the entire response in JSON.
 
-Put the full content for the "${type}" diagram type in the matching field "${field}". Other diagram fields can be empty strings. Use valid Mermaid where applicable.`;
+Example Response:
+\`\`\`json
+{
+  "nodes": [{"id": "1", "data": {"label": "App"}}],
+  "edges": []
+}
+\`\`\`
+\`\`\`mermaid
+flowchart TB
+  App
+\`\`\`
+`;
 
     const out = await chatWithAIModel({
       message: prompt,
-      model: "together",
+      model: "ollama",
       chatHistory: [],
       projectContext: {},
     });
 
-    let parsed: Record<string, string> = { ...EMPTY };
-    try {
-      const m = out.content.match(/\{[\s\S]*\}/);
-      if (m) {
-        const j = JSON.parse(m[0]) as Record<string, string>;
-        for (const k of Object.keys(EMPTY)) {
-          if (typeof j[k] === "string") parsed[k] = j[k];
-        }
-        if (typeof j.description === "string") (parsed as any).description = j.description;
-      } else {
-        parsed[field] = out.content.trim();
+    let parsed: Record<string, any> = { ...EMPTY };
+    let content = out.content.trim();
+    
+    let reactFlow = { nodes: [], edges: [] };
+    let mermaid = "";
+
+    // Extract JSON block
+    const jsonMatch = content.match(/\`\`\`json\s*(\{[\s\S]*?\})\s*\`\`\`/);
+    if (jsonMatch) {
+      try {
+        reactFlow = JSON.parse(jsonMatch[1]);
+      } catch (e) {
+        console.error("Failed to parse reactFlow json:", e);
       }
-    } catch {
-      parsed[field] = out.content.trim();
+    } else {
+      // Fallback if the LLM just returned raw JSON without ticks
+      try {
+        const m = content.match(/\{[\s\S]*\}/);
+        if (m) reactFlow = JSON.parse(m[0]);
+      } catch (e) {}
     }
+
+    // Extract mermaid block
+    const mermaidMatch = content.match(/\`\`\`mermaid\s*([\s\S]*?)\s*\`\`\`/);
+    if (mermaidMatch) {
+      mermaid = mermaidMatch[1].trim();
+    } else {
+      // If it forgot to wrap mermaid context, try to find flowchart or similar
+      const fallbackMatch = content.match(/(flowchart|sequenceDiagram|classDiagram|erDiagram)[\s\S]*/);
+      if (fallbackMatch && !fallbackMatch[0].includes("```json")) {
+        mermaid = fallbackMatch[0].replace(/\`\`\`/g, "").trim();
+      }
+    }
+    
+    // If we extracted the old format, map it
+    if ((reactFlow as any).reactFlow) reactFlow = (reactFlow as any).reactFlow;
+    if ((reactFlow as any).mermaid && !mermaid) mermaid = (reactFlow as any).mermaid;
+
+    parsed[field] = { reactFlow, mermaid: mermaid || content };
 
     res.json({
       ...EMPTY,

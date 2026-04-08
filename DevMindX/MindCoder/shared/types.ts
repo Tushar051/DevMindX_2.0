@@ -1,7 +1,7 @@
 // Shared type definitions for the DevMindX application
 
 // AI Model types
-export type AIModelId = 'together' | 'gemini' | 'chatgpt' | 'claude' | 'deepseek';
+export type AIModelId = 'together' | 'gemini' | 'chatgpt' | 'claude' | 'deepseek' | 'ollama';
 
 export interface Diagnostic {
   filePath: string;
