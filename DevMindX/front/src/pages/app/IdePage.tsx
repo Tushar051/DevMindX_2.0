@@ -143,6 +143,14 @@ const FALLBACK_MODEL_ROWS: IdeModelRow[] = [
   { id: "chatgpt", label: "ChatGPT", unlocked: false, priceInr: 1499 },
 ];
 
+/** Judge0 language IDs */
+const JUDGE0_LANGUAGES = [
+  { id: 71, name: "python", label: "Python 3" },
+  { id: 54, name: "cpp", label: "C++ (GCC 9.2.0)" },
+  { id: 62, name: "java", label: "Java (OpenJDK 13.0.1)" },
+  { id: 63, name: "javascript", label: "JavaScript (Node.js 12.14.0)" },
+];
+
 function getPreviewHtml(files: Record<string, string>): string {
   if (!files["index.html"]) return "";
   let html = files["index.html"];
@@ -634,6 +642,12 @@ export function IdePage() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
 
+  // Judge0 state
+  const [selectedLanguage, setSelectedLanguage] = useState(71); // Default to Python
+  const [stdin, setStdin] = useState("");
+  const [isStdinOpen, setIsStdinOpen] = useState(false);
+  const [executionTime, setExecutionTime] = useState<string | null>(null);
+
   // Chat History
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatHistoryList, setChatHistoryList] = useState<any[]>([]);
@@ -703,12 +717,32 @@ export function IdePage() {
   useEffect(() => {
     if (projectId) loadProject(projectId);
     else {
+      // Try loading from localStorage if not a project
+      const savedFiles = localStorage.getItem("devmindx_scratch_files");
+      if (savedFiles) {
+        try {
+          const parsed = JSON.parse(savedFiles);
+          setFiles(parsed);
+          const keys = Object.keys(parsed).sort();
+          if (keys.length > 0) setActivePath(keys[0]);
+        } catch (e) {
+          console.error("Local storage load failed", e);
+        }
+      } else {
+        setFiles({});
+        setActivePath(null);
+      }
       setLoading(false);
-      setFiles({});
-      setActivePath(null);
       setProjectName("Scratch pad");
     }
   }, [projectId, loadProject]);
+
+  // Auto-save to localStorage
+  useEffect(() => {
+    if (!projectId && Object.keys(files).length > 0) {
+      localStorage.setItem("devmindx_scratch_files", JSON.stringify(files));
+    }
+  }, [files, projectId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -837,27 +871,60 @@ export function IdePage() {
       appendTerminal("(no file or empty buffer)");
       return;
     }
-    appendTerminal(`> run ${activePath} (${language})`);
+
+    const langObj = JUDGE0_LANGUAGES.find(l => l.id === selectedLanguage);
+    appendTerminal(`> Executing with Judge0: ${activePath} (${langObj?.label || selectedLanguage})`);
+    
     try {
-      const res = await fetch(apiUrl("/api/ide/execute"), {
+      const res = await fetch(apiUrl("/api/run"), {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: content,
-          language,
-          filename: activePath.split("/").pop(),
+          source_code: content,
+          language_id: selectedLanguage,
+          stdin: stdin,
         }),
       });
+      
       const data = await res.json().catch(() => ({}));
+      
       if (!res.ok) {
         appendTerminal(`Error: ${data.error || res.statusText}`);
+        if (data.details) appendTerminal(`Details: ${JSON.stringify(data.details)}`);
         return;
       }
-      if (data.output) appendTerminal(String(data.output));
-      if (data.error) appendTerminal(`stderr: ${data.error}`);
-      appendTerminal(`exit ${data.exitCode ?? "?"}`);
+      
+      if (data.compile_output) {
+        appendTerminal("--- Compile Output ---");
+        appendTerminal(data.compile_output);
+      }
+      
+      if (data.stdout) {
+        appendTerminal("--- Output ---");
+        appendTerminal(data.stdout);
+      }
+      
+      if (data.stderr) {
+        appendTerminal("--- Errors ---");
+        appendTerminal(data.stderr);
+      }
+      
+      if (data.time) {
+        setExecutionTime(data.time);
+        appendTerminal(`Time: ${data.time}s`);
+      }
+      
+      if (data.memory) {
+        appendTerminal(`Memory: ${Math.round(data.memory / 1024)}KB`);
+      }
+      
+      if (data.status) {
+        appendTerminal(`Status: ${data.status.description}`);
+      }
+
     } catch (e) {
       appendTerminal(`Request failed: ${e instanceof Error ? e.message : "unknown"}`);
+      appendTerminal("Tip: Ensure Judge0 is running on http://localhost:2358");
     }
   };
 
@@ -1246,10 +1313,35 @@ export function IdePage() {
             type="button"
             title="Run code"
             onClick={() => void runCode()}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
           >
             <Play className="h-3.5 w-3.5 fill-current" />
-            <span className="hidden sm:inline">Run Code</span>
+            <span>Run</span>
+          </button>
+
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/50 px-2 py-1">
+            <Code2 className="h-3 w-3 text-zinc-500" />
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(Number(e.target.value))}
+              className="bg-transparent text-[11px] font-medium text-zinc-300 outline-none cursor-pointer"
+            >
+              {JUDGE0_LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id} className="bg-zinc-900 text-zinc-300">
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsStdinOpen(!isStdinOpen)}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-all ${isStdinOpen ? "border-violet-500/50 bg-violet-600/20 text-violet-300" : "border-zinc-700 text-zinc-400 hover:bg-white/5"}`}
+            title="Toggle STDIN Input"
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">Stdin</span>
           </button>
         </div>
       </header>
@@ -1466,22 +1558,40 @@ export function IdePage() {
                   </span>
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  setTerminalLines([
-                    "DevMindX Interactive Terminal.",
-                    "Commands: run · clear",
-                    "$ ",
-                  ])
-                }
-                className="text-[11px] text-[#888] hover:text-[#ccc]"
-              >
-                Clear
-              </button>
+                <div className="flex items-center gap-4">
+                  {executionTime && (
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">
+                      Last Execution: {executionTime}s
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTerminalLines(["$ "]);
+                      setExecutionTime(null);
+                    }}
+                    className="text-[11px] text-[#888] hover:text-[#ccc]"
+                  >
+                    Clear Console
+                  </button>
+                </div>
             </div>
             {bottomTab === "terminal" ? (
               <div className="flex min-h-0 flex-1 flex-col p-2">
+                {isStdinOpen && (
+                  <div className="mb-2 shrink-0 space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Standard Input (stdin)</span>
+                      <button onClick={() => setStdin("")} className="text-[10px] text-zinc-600 hover:text-zinc-400">Clear</button>
+                    </div>
+                    <textarea
+                      value={stdin}
+                      onChange={(e) => setStdin(e.target.value)}
+                      placeholder="Input to your program..."
+                      className="w-full h-16 resize-none rounded border border-zinc-800 bg-zinc-900/50 p-2 font-mono text-[11px] text-zinc-300 outline-none focus:border-violet-500/40"
+                    />
+                  </div>
+                )}
                 <div
                   className="font-mono text-[12px] leading-relaxed text-[#d4d4d4] min-h-0 flex-1 overflow-y-auto rounded border border-emerald-500/40 bg-[#1e1e1e] p-2"
                   style={{ boxShadow: "inset 0 0 0 1px rgba(16,185,129,0.15)" }}

@@ -1,0 +1,29 @@
+# Judge0 Docker Commands
+
+## 1. Pull Required Images
+docker pull judge0/judge0:1.13.1
+docker pull postgres:16.2
+docker pull redis:7.2.4
+
+## 2. Start Judge0 Services
+# Make sure you are in the directory: c:\Users\tusha\Desktop\DevMindX\judge0\judge0-v1.13.1
+docker compose up -d
+
+## 3. Verify Installation
+# Check if all 4 containers (server, workers, db, redis) are running
+docker ps
+
+## 4. Troubleshooting
+# View logs if something isn't working
+docker compose logs -f server
+docker compose logs -f workers
+
+## 5. Stop Services
+docker compose down
+
+How to watch the progress:
+You can see the live download bars by running this command in your terminal:
+
+powershell
+cd c:\Users\tusha\Desktop\DevMindX\judge0\judge0-v1.13.1
+docker compose up
