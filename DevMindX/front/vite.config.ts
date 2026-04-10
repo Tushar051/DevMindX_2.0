@@ -16,12 +16,12 @@ export default defineConfig({
         strictPort: false,
         proxy: {
             "/api": { 
-                target: "http://localhost:5000", 
+                target: "http://localhost:5001", 
                 changeOrigin: true,
                 timeout: 120000, // 2 minutes
                 proxyTimeout: 120000
             },
-            "/socket.io": { target: "http://localhost:5000", ws: true },
+            "/socket.io": { target: "http://localhost:5001", ws: true },
         },
     },
     publicDir: "./static",

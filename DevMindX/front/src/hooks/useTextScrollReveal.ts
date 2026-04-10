@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
  * the user has scrolled past the container.
  */
 export function useTextScrollReveal<T extends HTMLElement = HTMLDivElement>(
-    options?: any // Ignored backwards compatibility parameter
+    _options?: any // Ignored backwards compatibility parameter
 ) {
     const ref = useRef<T>(null);
 

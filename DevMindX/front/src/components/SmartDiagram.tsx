@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ReactFlow,
   useNodesState,
   useEdgesState,
   Controls,
   Background,
-  Panel,
   Edge,
   Node,
+  Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
@@ -39,8 +39,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = "TB") => 
     const nodeWithPosition = dagreGraph.node(node.id);
     return {
       ...node,
-      targetPosition: isHorizontal ? "left" : "top",
-      sourcePosition: isHorizontal ? "right" : "bottom",
+      targetPosition: isHorizontal ? Position.Left : Position.Top,
+      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
         x: nodeWithPosition.x - 75,
         y: nodeWithPosition.y - 25,
@@ -68,8 +68,8 @@ export function SmartDiagram({ data }: SmartDiagramProps) {
     }
   }, [hasReactFlow, mermaidData]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
     if (hasReactFlow) {

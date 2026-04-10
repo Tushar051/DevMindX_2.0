@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { toPng } from "html-to-image";
 import { Download, Loader2 } from "lucide-react";

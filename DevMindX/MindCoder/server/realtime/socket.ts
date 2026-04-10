@@ -45,7 +45,7 @@ function getNextColor(): string {
 export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
   // Parse allowed origins from environment
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
-  const defaultOrigins = ['http://localhost:5173', 'http://localhost:5000'];
+  const defaultOrigins = ['http://localhost:5173', 'http://localhost:5001'];
   const origins = [...new Set([...defaultOrigins, ...allowedOrigins])].filter(Boolean);
 
   const io = new SocketIOServer(httpServer, {

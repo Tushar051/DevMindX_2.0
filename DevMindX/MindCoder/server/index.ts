@@ -24,7 +24,7 @@ app.use((req, res, next) => {
     'https://devmindx.vercel.app',
     'http://localhost:5173',
     'http://localhost:5174',
-    'http://localhost:5000'
+    'http://localhost:5001'
   ];
   const origin = req.headers.origin;
   
@@ -117,7 +117,7 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
   // Create HTTP server
   const httpServer = createServer(app);
 
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || '5001', 10);
   
   // Start the HTTP server first - CRITICAL for Render to detect the service is up
   httpServer.listen(port, '0.0.0.0', () => {
@@ -142,7 +142,7 @@ import { ensureChatHistoryCollection } from './models/chatHistory.js';
       console.error('Some features requiring MongoDB will not be available.');
     });
 
-  // Dev: either embed Vite (single port 5000) or API-only when the UI runs from ../front (DEV_API_ONLY + Vite on 5173).
+  // Dev: either embed Vite (single port 5001) or API-only when the UI runs from ../front (DEV_API_ONLY + Vite on 5173).
   const devApiOnly =
     process.env.DEV_API_ONLY === "1" || process.env.DEV_API_ONLY === "true";
 

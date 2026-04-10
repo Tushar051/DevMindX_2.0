@@ -130,8 +130,8 @@ function extractFileChanges(content: string): FileChange[] {
     fileChanges.push({ filePath: p, newContent: c, action: "update" });
   };
 
-  // ```lang\n// path/to/file.ext\ncode```
-  const fileBlockRegex = /```(?:[\w.+#-]+)?\s*\n(?:\/\/\s*([^\n]+\.[\w.]+)\s*\n)([\s\S]*?)```/g;
+  // Match /* style.css */ or <!-- index.html --> or // script.js
+  const fileBlockRegex = /```(?:[\w.+#-]+)?\s*\n(?:(?:\/\*|<!--|\/\/)\s*([^\n]+\.[\w.]+)\s*(?:\*\/|-->)?\s*\n)([\s\S]*?)```/g;
   let match;
   while ((match = fileBlockRegex.exec(content)) !== null) {
     const [, filePath, fileContent] = match;
@@ -145,10 +145,10 @@ function extractFileChanges(content: string): FileChange[] {
     if (filePath && fileContent) push(filePath, fileContent);
   }
 
-  // Original: ```lang\npath.ext\ncode``` (path as first line without //)
-  const fileBlockRegex2 = /```(\w+)?\s*(?:\/\/\s*)?([^\n]+\.[\w]+)\n([\s\S]*?)```/g;
+  // Original: ```lang\npath.ext\ncode``` (path as first line without comment chars, but maybe with comment chars)
+  const fileBlockRegex2 = /```(?:[\w.+#-]+)?\s*(?:(?:\/\/\s*|\/\*\s*|<!--\s*)?([^\n]+\.[\w]+)(?:\s*\*\/|\s*-->)?)\n([\s\S]*?)```/g;
   while ((match = fileBlockRegex2.exec(content)) !== null) {
-    const [, , filePath, fileContent] = match;
+    const [, filePath, fileContent] = match;
     if (filePath && fileContent) push(filePath, fileContent);
   }
 
@@ -193,7 +193,21 @@ Requirements:
 - Include all necessary files (HTML, CSS, JavaScript, package.json if needed)
 - Add proper error handling and comments
 - Make it production-ready
-- Include a README.md with setup instructions`;
+- Include a README.md with setup instructions
+- CRITICALLY IMPORTANT: You must provide the complete file content. Please label the file name at the VERY TOP of every code block inside a comment. Example:
+\`\`\`html
+<!-- index.html -->
+...
+\`\`\`
+\`\`\`css
+/* style.css */
+...
+\`\`\`
+\`\`\`javascript
+// script.js
+...
+\`\`\`
+`;
 
     const response = await callOllama(fullPrompt, model, systemPrompt, 0.7);
     
@@ -206,6 +220,18 @@ Requirements:
         files[change.filePath] = change.newContent;
       }
     });
+
+    // Fallback: If no files were extracted cleanly via filename tags, try grabbing plain markdown blocks
+    if (Object.keys(files).length === 0) {
+      const htmlMatch = /```(?:html)\s*\n([\s\S]*?)```/i.exec(response);
+      if (htmlMatch) files['index.html'] = htmlMatch[1];
+      
+      const cssMatch = /```(?:css)\s*\n([\s\S]*?)```/i.exec(response);
+      if (cssMatch) files['style.css'] = cssMatch[1];
+      
+      const jsMatch = /```(?:javascript|js)\s*\n([\s\S]*?)```/i.exec(response);
+      if (jsMatch) files['script.js'] = jsMatch[1];
+    }
 
     // Ensure we have at least an index.html
     if (!files['index.html'] && !files['src/index.html']) {

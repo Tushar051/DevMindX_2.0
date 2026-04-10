@@ -23,7 +23,7 @@ const createTransporter = () => {
 };
 
 export async function sendVerificationEmail(email: string, token: string): Promise<void> {
-  const verificationUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/auth/verify?token=${token}`;
+  const verificationUrl = `${process.env.BASE_URL || 'http://localhost:5001'}/api/auth/verify?token=${token}`;
   
   const mailOptions = {
     from: process.env.EMAIL_USER || 'webdevx.ai@gmail.com',
@@ -70,7 +70,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
 }
 
 export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  const resetUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/reset-password?token=${token}`;
+  const resetUrl = `${process.env.BASE_URL || 'http://localhost:5001'}/reset-password?token=${token}`;
   
   const mailOptions = {
     from: process.env.EMAIL_USER || 'webdevx.ai@gmail.com',

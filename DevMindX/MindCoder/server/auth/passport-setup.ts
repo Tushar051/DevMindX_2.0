@@ -11,7 +11,7 @@ import { hashPassword } from "../services/auth.js";
 function apiBase(): string {
   if (process.env.API_BASE_URL) return process.env.API_BASE_URL.replace(/\/$/, "");
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
-  const port = process.env.PORT || "5000";
+  const port = process.env.PORT || "5001";
   return `http://localhost:${port}`;
 }
 
@@ -79,7 +79,7 @@ async function ensureVerifiedOAuthUser(
 
 /**
  * Registers OAuth strategies from .env (GOOGLE_*, GITHUB_*).
- * Callback URLs must hit this API (e.g. http://localhost:5000/...) — add the same URIs in Google/GitHub developer consoles.
+ * Callback URLs must hit this API (e.g. http://localhost:5001/...) — add the same URIs in Google/GitHub developer consoles.
  */
 export function registerPassportStrategies(): void {
   const gid = process.env.GOOGLE_CLIENT_ID?.trim();
